@@ -1,4 +1,4 @@
-name: Paquete .deb
+name: Build .deb
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write   # para adjuntar el .deb a la versión cuando se sube una etiqueta v*
+  contents: write   # to attach the .deb files to the release when a v* tag is pushed
 
 jobs:
   deb:
@@ -16,25 +16,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Dependencias de compilación
+      - name: Build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends build-essential pkg-config libgtk-3-dev librsvg2-bin dpkg-dev
+          sudo apt-get install -y --no-install-recommends build-essential pkg-config libgtk-3-dev \
+            libxfce4panel-2.0-dev librsvg2-bin gettext dpkg-dev
 
-      - name: Compilar (sin advertencias) y empaquetar
+      - name: Build (no warnings) and package
         run: make deb
 
-      - name: Revisar el paquete
+      - name: Inspect the packages
         run: |
-          dpkg-deb --info build/*.deb
-          dpkg-deb --contents build/*.deb
+          for d in build/*.deb; do dpkg-deb --info "$d"; dpkg-deb --contents "$d"; done
 
       - uses: actions/upload-artifact@v4
         with:
           name: cpu-freq-deb
           path: build/*.deb
 
-      - name: Publicar en la versión
+      - name: Publish to the release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:

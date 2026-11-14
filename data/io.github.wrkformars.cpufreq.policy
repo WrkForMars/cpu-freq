@@ -3,9 +3,13 @@
  "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
  "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
 <policyconfig>
+  <vendor>cpu-freq</vendor>
+  <vendor_url>https://github.com/WrkForMars/cpu-freq</vendor_url>
   <action id="io.github.wrkformars.cpufreq.ajustar">
-    <description>Cambiar el límite de velocidad del procesador</description>
-    <message>Se necesita permiso para cambiar la velocidad del procesador</message>
+    <description>Change the processor speed limit</description>
+    <description xml:lang="es">Cambiar el límite de velocidad del procesador</description>
+    <message>Authorization is required to change the processor speed</message>
+    <message xml:lang="es">Se necesita permiso para cambiar la velocidad del procesador</message>
     <icon_name>cpu-freq</icon_name>
     <defaults>
       <allow_any>no</allow_any>

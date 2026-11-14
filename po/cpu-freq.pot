@@ -1,0 +1,348 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the cpu-freq package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: cpu-freq 1.4.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-11-14 00:50-0600\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: src/cpu-freq.c:93 src/cpu-freq.c:98
+msgid "System"
+msgstr ""
+
+#: src/cpu-freq.c:93
+msgid "Light"
+msgstr ""
+
+#: src/cpu-freq.c:94
+msgid "Dark"
+msgstr ""
+
+#: src/cpu-freq.c:94
+msgid "AMOLED"
+msgstr ""
+
+#: src/cpu-freq.c:102
+msgid "None"
+msgstr ""
+
+#: src/cpu-freq.c:102
+msgid "Tray icon"
+msgstr ""
+
+#: src/cpu-freq.c:103
+msgid "Panel plugin (XFCE)"
+msgstr ""
+
+#: src/cpu-freq.c:446
+msgid "Auto"
+msgstr ""
+
+#: src/cpu-freq.c:447
+msgid "Automatic"
+msgstr ""
+
+#: src/cpu-freq.c:448
+msgid "auto-cpufreq decides the limit and turbo"
+msgstr ""
+
+#: src/cpu-freq.c:449
+msgid "No limit: the processor uses its full range"
+msgstr ""
+
+#: src/cpu-freq.c:457
+#, c-format
+msgid "Limit %s, turbo off"
+msgstr ""
+
+#: src/cpu-freq.c:457
+#, c-format
+msgid "Limit %s"
+msgstr ""
+
+#: src/cpu-freq.c:468 src/cpu-freq.c:768 src/panel.c:93
+msgid "Turbo"
+msgstr ""
+
+#: src/cpu-freq.c:469
+#, c-format
+msgid "%s + turbo"
+msgstr ""
+
+#: src/cpu-freq.c:470
+msgid "No limit, turbo always on"
+msgstr ""
+
+#: src/cpu-freq.c:792
+msgid "Open"
+msgstr ""
+
+#: src/cpu-freq.c:793
+msgid "Quit"
+msgstr ""
+
+#: src/cpu-freq.c:806 src/cpu-freq.c:832 src/cpu-freq.c:1213
+msgid "CPU Speed"
+msgstr ""
+
+#: src/cpu-freq.c:871
+msgid "Performance"
+msgstr ""
+
+#: src/cpu-freq.c:871
+msgid "Power saving"
+msgstr ""
+
+#: src/cpu-freq.c:872
+msgid "Adaptive"
+msgstr ""
+
+#: src/cpu-freq.c:872
+msgid "On demand"
+msgstr ""
+
+#: src/cpu-freq.c:873
+msgid "Conservative"
+msgstr ""
+
+#: src/cpu-freq.c:873
+msgid "Manual"
+msgstr ""
+
+#: src/cpu-freq.c:881
+msgid "Charging"
+msgstr ""
+
+#: src/cpu-freq.c:882
+msgid "Discharging"
+msgstr ""
+
+#: src/cpu-freq.c:883
+msgid "Full"
+msgstr ""
+
+#: src/cpu-freq.c:884
+msgid "Not charging"
+msgstr ""
+
+#: src/cpu-freq.c:904
+#, c-format
+msgid "%.1f GHz, turbo on"
+msgstr ""
+
+#: src/cpu-freq.c:905
+#, c-format
+msgid "%.1f GHz, turbo off"
+msgstr ""
+
+#: src/cpu-freq.c:908
+msgid "different limits per core"
+msgstr ""
+
+#: src/cpu-freq.c:914
+msgid "Applying…"
+msgstr ""
+
+#: src/cpu-freq.c:916
+#, c-format
+msgid "The system is not keeping your choice: now %s."
+msgstr ""
+
+#: src/cpu-freq.c:919
+#, c-format
+msgid "auto-cpufreq decides · now %s."
+msgstr ""
+
+#: src/cpu-freq.c:921
+#, c-format
+msgid "Now: %s."
+msgstr ""
+
+#: src/cpu-freq.c:962
+msgid "Speed limit"
+msgstr ""
+
+#: src/cpu-freq.c:963
+msgid "Speed limit · on charger"
+msgstr ""
+
+#: src/cpu-freq.c:964
+msgid "Speed limit · on battery"
+msgstr ""
+
+#: src/cpu-freq.c:977 src/cpu-freq.c:979
+#, c-format
+msgid "Mode: %s"
+msgstr ""
+
+#: src/cpu-freq.c:977
+msgid "mixed"
+msgstr ""
+
+#: src/cpu-freq.c:978
+#, c-format
+msgid "Mode: %s (%s)"
+msgstr ""
+
+#: src/cpu-freq.c:985
+msgid "Critical"
+msgstr ""
+
+#: src/cpu-freq.c:986
+msgid "High"
+msgstr ""
+
+#: src/cpu-freq.c:987
+msgid "Normal"
+msgstr ""
+
+#: src/cpu-freq.c:989
+msgid "No sensor"
+msgstr ""
+
+#: src/cpu-freq.c:997
+msgid "Low"
+msgstr ""
+
+#: src/cpu-freq.c:1000
+msgid "Not detected"
+msgstr ""
+
+#: src/cpu-freq.c:1004
+msgid "Connected"
+msgstr ""
+
+#: src/cpu-freq.c:1004
+msgid "Disconnected"
+msgstr ""
+
+#: src/cpu-freq.c:1005
+msgid "On battery"
+msgstr ""
+
+#: src/cpu-freq.c:1011
+msgid "Very low"
+msgstr ""
+
+#: src/cpu-freq.c:1012
+msgid "Tight"
+msgstr ""
+
+#: src/cpu-freq.c:1021 src/cpu-freq.c:1023 src/panel.c:94
+msgid "Active"
+msgstr ""
+
+#: src/cpu-freq.c:1021 src/panel.c:94
+msgid "Off"
+msgstr ""
+
+#: src/cpu-freq.c:1022
+msgid "No sleep"
+msgstr ""
+
+#: src/cpu-freq.c:1023
+msgid "Stopped"
+msgstr ""
+
+#: src/cpu-freq.c:1024
+msgid "No alerts"
+msgstr ""
+
+#: src/cpu-freq.c:1053
+msgid "Not applied: polkit denied permission."
+msgstr ""
+
+#: src/cpu-freq.c:1055
+#, c-format
+msgid "Could not apply (code %d)."
+msgstr ""
+
+#: src/cpu-freq.c:1068
+msgid "The helper is missing: install the cpu-freq package."
+msgstr ""
+
+#: src/cpu-freq.c:1080
+#, c-format
+msgid "Could not run pkexec: %s"
+msgstr ""
+
+#: src/cpu-freq.c:1127
+msgid "The XFCE panel opened so you can add the plugin."
+msgstr ""
+
+#: src/cpu-freq.c:1129
+msgid "Install the cpu-freq-xfce package to use the panel."
+msgstr ""
+
+#: src/cpu-freq.c:1132
+msgid "When you close the window, the app stays in the tray."
+msgstr ""
+
+#: src/cpu-freq.c:1178
+msgid "Settings"
+msgstr ""
+
+#: src/cpu-freq.c:1185
+msgid "Theme"
+msgstr ""
+
+#: src/cpu-freq.c:1185
+msgid "Language"
+msgstr ""
+
+#: src/cpu-freq.c:1185
+msgid "Bottom bar"
+msgstr ""
+
+#: src/cpu-freq.c:1231
+msgid ""
+"With auto-cpufreq, the choice is saved for the current power source (charger "
+"or battery) and survives a restart."
+msgstr ""
+
+#: src/cpu-freq.c:1252
+msgid "System status"
+msgstr ""
+
+#: src/cpu-freq.c:1262
+msgid "Temperature"
+msgstr ""
+
+#: src/cpu-freq.c:1262
+msgid "Battery"
+msgstr ""
+
+#: src/cpu-freq.c:1262
+msgid "Charger"
+msgstr ""
+
+#: src/cpu-freq.c:1262
+msgid "Free RAM"
+msgstr ""
+
+#: src/cpu-freq.c:1262
+msgid "Swap used"
+msgstr ""
+
+#: src/cpu-freq.c:1263
+msgid "Remote mode"
+msgstr ""
+
+#: src/cpu-freq.c:1263
+msgid "Watchdog"
+msgstr ""
+
+#: src/panel.c:95
+msgid "Click to open CPU Speed"
+msgstr ""

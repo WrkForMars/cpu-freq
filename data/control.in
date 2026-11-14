@@ -1,0 +1,18 @@
+Package: cpu-freq
+Version: @VERSION@
+Architecture: @ARCH@
+Maintainer: @MAINT@
+Installed-Size: @SIZE@
+Depends: @SHLIBS@, pkexec | policykit-1
+Recommends: auto-cpufreq
+Suggests: cpu-freq-xfce
+Section: utils
+Priority: optional
+Homepage: https://github.com/WrkForMars/cpu-freq
+Description: CPU speedometer and speed limiter
+ Shows the current frequency, CPU governor, temperature, battery, RAM and
+ swap, and lets you cap the speed at the frequencies your processor
+ supports, with or without turbo, through a small polkit-authorized
+ helper. If auto-cpufreq is installed, the choice is saved in its
+ configuration. Light, dark and AMOLED themes; English, Spanish,
+ Portuguese, French and German; optional tray icon.

@@ -1,0 +1,17 @@
+[Xfce Panel]
+Type=X-XFCE-PanelPlugin
+Name=CPU Speed
+Name[es]=Velocidad del CPU
+Name[pt]=Velocidade da CPU
+Name[fr]=Vitesse du processeur
+Name[de]=CPU-Geschwindigkeit
+Comment=CPU speed in the panel
+Comment[es]=Velocidad del CPU en el panel
+Comment[pt]=Velocidade da CPU no painel
+Comment[fr]=Vitesse du processeur dans le tableau de bord
+Comment[de]=CPU-Geschwindigkeit in der Leiste
+Icon=cpu-freq
+X-XFCE-Module=cpu-freq-panel
+X-XFCE-Internal=true
+X-XFCE-Unique=false
+X-XFCE-API=2.0

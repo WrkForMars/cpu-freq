@@ -35,7 +35,7 @@ static int escribir(const char *ruta, const char *valor)
 {
     int fd = open(ruta, O_WRONLY | O_NOFOLLOW | O_CLOEXEC);
     if (fd < 0) {
-        fprintf(stderr, "ayudante: no se pudo abrir %s: %s\n", ruta, strerror(errno));
+        fprintf(stderr, "cpu-freq helper: cannot open %s: %s\n", ruta, strerror(errno));
         return -1;
     }
     size_t n = strlen(valor);
@@ -43,7 +43,7 @@ static int escribir(const char *ruta, const char *valor)
     int err = errno;
     close(fd);
     if (w != (ssize_t)n) {
-        fprintf(stderr, "ayudante: no se pudo escribir %s: %s\n", ruta, strerror(err));
+        fprintf(stderr, "cpu-freq helper: cannot write %s: %s\n", ruta, strerror(err));
         return -1;
     }
     return 0;
@@ -138,7 +138,7 @@ static void anexar(Edicion *e, const char *s, size_t n)
     if (e->len + n + 1 > e->cap) {
         e->cap = (e->len + n + 1) * 2;
         e->salida = realloc(e->salida, e->cap);
-        if (!e->salida) { fprintf(stderr, "ayudante: sin memoria\n"); exit(1); }
+        if (!e->salida) { fprintf(stderr, "cpu-freq helper: out of memory\n"); exit(1); }
     }
     memcpy(e->salida + e->len, s, n);
     e->len += n;
@@ -176,13 +176,13 @@ static int configurar_auto_cpufreq(const char *seccion, const char *marca,
 {
     char *actual = leer_archivo(CONF);
     if (!actual) {
-        fprintf(stderr, "ayudante: no se pudo leer %s\n", CONF);
+        fprintf(stderr, "cpu-freq helper: cannot read %s\n", CONF);
         return -1;
     }
 
     /* Copia del original, solo la primera vez (vacía si no había configuración) */
     if (access(RESPALDO, F_OK) != 0 && guardar(RESPALDO, actual, 1) != 0) {
-        fprintf(stderr, "ayudante: no se pudo crear %s: %s\n", RESPALDO, strerror(errno));
+        fprintf(stderr, "cpu-freq helper: cannot create %s: %s\n", RESPALDO, strerror(errno));
         free(actual);
         return -1;
     }
@@ -219,7 +219,7 @@ static int configurar_auto_cpufreq(const char *seccion, const char *marca,
         unlink(CONF_TMP);
         /* rename atómico: auto-cpufreq lo ve como IN_MOVED_TO y recarga */
         if (guardar(CONF_TMP, e.salida, 1) != 0 || rename(CONF_TMP, CONF) != 0) {
-            fprintf(stderr, "ayudante: no se pudo guardar %s: %s\n", CONF, strerror(errno));
+            fprintf(stderr, "cpu-freq helper: cannot save %s: %s\n", CONF, strerror(errno));
             unlink(CONF_TMP);
             r = -1;
         }
@@ -244,7 +244,7 @@ static int escribir_sysfs(long khz, int turbo)
 {
     glob_t g;
     if (!hw_politicas(&g)) {
-        fprintf(stderr, "ayudante: no se encontró cpufreq\n");
+        fprintf(stderr, "cpu-freq helper: cpufreq not found\n");
         return 1;
     }
     /* Encender el turbo primero: en Intel sube cpuinfo_max_freq y el máximo se lee después */
@@ -268,13 +268,13 @@ static int escribir_sysfs(long khz, int turbo)
 int main(int argc, char **argv)
 {
     if (argc != 2) {
-        fprintf(stderr, "Uso: ayudante auto|turbo|<kHz>\n");
+        fprintf(stderr, "Usage: ayudante auto|turbo|<kHz>\n");
         return 2;
     }
 
     HwFrec h;
     if (!hw_frecuencias(&h)) {
-        fprintf(stderr, "ayudante: este equipo no expone cpufreq\n");
+        fprintf(stderr, "cpu-freq helper: this computer does not expose cpufreq\n");
         return 1;
     }
 
@@ -285,19 +285,19 @@ int main(int argc, char **argv)
         size_t n = strlen(a);
         char *fin;
         if (n < 4 || n > 8 || strspn(a, "0123456789") != n) {
-            fprintf(stderr, "ayudante: argumento no válido (usa auto, turbo o una frecuencia en kHz)\n");
+            fprintf(stderr, "cpu-freq helper: invalid argument (use auto, turbo or a frequency in kHz)\n");
             return 2;
         }
         khz = strtol(a, &fin, 10);
         if (!hw_valida_khz(&h, khz)) {
-            fprintf(stderr, "ayudante: %ld kHz no es una frecuencia que admita este procesador\n", khz);
+            fprintf(stderr, "cpu-freq helper: %ld kHz is not a frequency this processor supports\n", khz);
             return 2;
         }
     }
 
 #ifndef PRUEBA
     if (geteuid() != 0) {
-        fprintf(stderr, "ayudante: necesita root (ejecútalo con pkexec)\n");
+        fprintf(stderr, "cpu-freq helper: must run as root (use pkexec)\n");
         return 3;
     }
 #endif

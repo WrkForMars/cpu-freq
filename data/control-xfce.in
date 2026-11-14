@@ -1,0 +1,12 @@
+Package: cpu-freq-xfce
+Version: @VERSION@
+Architecture: @ARCH@
+Maintainer: @MAINT@
+Installed-Size: @SIZE@
+Depends: @SHLIBS@, cpu-freq (= @VERSION@), xfce4-panel
+Section: utils
+Priority: optional
+Homepage: https://github.com/WrkForMars/cpu-freq
+Description: XFCE panel plugin for cpu-freq
+ A mini speedometer with the CPU frequency in the XFCE panel.
+ Clicking it opens the cpu-freq app.

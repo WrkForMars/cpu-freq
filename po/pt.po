@@ -1,0 +1,247 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: cpu-freq\n"
+"PO-Revision-Date: 2026-11-14 00:00+0000\n"
+"Last-Translator: cpu-freq\n"
+"Language-Team: Portuguese\n"
+"Language: pt\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "System"
+msgstr "Sistema"
+
+msgid "Light"
+msgstr "Claro"
+
+msgid "Dark"
+msgstr "Escuro"
+
+msgid "AMOLED"
+msgstr "AMOLED"
+
+msgid "None"
+msgstr "Nenhuma"
+
+msgid "Tray icon"
+msgstr "Ícone na bandeja"
+
+msgid "Panel plugin (XFCE)"
+msgstr "Plugin do painel (XFCE)"
+
+msgid "Auto"
+msgstr "Auto"
+
+msgid "Automatic"
+msgstr "Automático"
+
+msgid "auto-cpufreq decides the limit and turbo"
+msgstr "O auto-cpufreq decide o limite e o turbo"
+
+msgid "No limit: the processor uses its full range"
+msgstr "Sem limite: o processador usa toda a sua faixa"
+
+msgid "Limit %s, turbo off"
+msgstr "Limite de %s, sem turbo"
+
+msgid "Limit %s"
+msgstr "Limite de %s"
+
+msgid "Turbo"
+msgstr "Turbo"
+
+msgid "%s + turbo"
+msgstr "%s + turbo"
+
+msgid "No limit, turbo always on"
+msgstr "Sem limite e com o turbo sempre ligado"
+
+msgid "Open"
+msgstr "Abrir"
+
+msgid "Quit"
+msgstr "Sair"
+
+msgid "CPU Speed"
+msgstr "Velocidade da CPU"
+
+msgid "Performance"
+msgstr "Desempenho"
+
+msgid "Power saving"
+msgstr "Economia"
+
+msgid "Adaptive"
+msgstr "Adaptável"
+
+msgid "On demand"
+msgstr "Sob demanda"
+
+msgid "Conservative"
+msgstr "Conservador"
+
+msgid "Manual"
+msgstr "Manual"
+
+msgid "Charging"
+msgstr "Carregando"
+
+msgid "Discharging"
+msgstr "Descarregando"
+
+msgid "Full"
+msgstr "Cheia"
+
+msgid "Not charging"
+msgstr "Sem carregar"
+
+msgid "%.1f GHz, turbo on"
+msgstr "%.1f GHz, turbo ligado"
+
+msgid "%.1f GHz, turbo off"
+msgstr "%.1f GHz, turbo desligado"
+
+msgid "different limits per core"
+msgstr "limites diferentes por núcleo"
+
+msgid "Applying…"
+msgstr "Aplicando…"
+
+msgid "The system is not keeping your choice: now %s."
+msgstr "O sistema não está respeitando sua escolha: agora %s."
+
+msgid "auto-cpufreq decides · now %s."
+msgstr "O auto-cpufreq decide · agora %s."
+
+msgid "Now: %s."
+msgstr "Agora: %s."
+
+msgid "Speed limit"
+msgstr "Limite de velocidade"
+
+msgid "Speed limit · on charger"
+msgstr "Limite de velocidade · na tomada"
+
+msgid "Speed limit · on battery"
+msgstr "Limite de velocidade · na bateria"
+
+msgid "Mode: %s"
+msgstr "Modo: %s"
+
+msgid "mixed"
+msgstr "misto"
+
+msgid "Mode: %s (%s)"
+msgstr "Modo: %s (%s)"
+
+msgid "Critical"
+msgstr "Crítica"
+
+msgid "High"
+msgstr "Alta"
+
+msgid "Normal"
+msgstr "Normal"
+
+msgid "No sensor"
+msgstr "Sem sensor"
+
+msgid "Low"
+msgstr "Baixa"
+
+msgid "Not detected"
+msgstr "Não detectada"
+
+msgid "Connected"
+msgstr "Conectado"
+
+msgid "Disconnected"
+msgstr "Desconectado"
+
+msgid "On battery"
+msgstr "Na bateria"
+
+msgid "Very low"
+msgstr "Muito pouca"
+
+msgid "Tight"
+msgstr "Justa"
+
+msgid "Active"
+msgstr "Ativo"
+
+msgid "Off"
+msgstr "Desligado"
+
+msgid "No sleep"
+msgstr "Sem suspensão"
+
+msgid "Stopped"
+msgstr "Parado"
+
+msgid "No alerts"
+msgstr "Sem avisos"
+
+msgid "Not applied: polkit denied permission."
+msgstr "Não aplicado: o polkit negou a permissão."
+
+msgid "Could not apply (code %d)."
+msgstr "Não foi possível aplicar (código %d)."
+
+msgid "The helper is missing: install the cpu-freq package."
+msgstr "Falta o auxiliar: instale o pacote cpu-freq."
+
+msgid "Could not run pkexec: %s"
+msgstr "Não foi possível executar o pkexec: %s"
+
+msgid "The XFCE panel opened so you can add the plugin."
+msgstr "O painel do XFCE foi aberto para adicionar o plugin."
+
+msgid "Install the cpu-freq-xfce package to use the panel."
+msgstr "Instale o pacote cpu-freq-xfce para usar o painel."
+
+msgid "When you close the window, the app stays in the tray."
+msgstr "Ao fechar a janela, o app continua na bandeja."
+
+msgid "Settings"
+msgstr "Ajustes"
+
+msgid "Theme"
+msgstr "Tema"
+
+msgid "Language"
+msgstr "Idioma"
+
+msgid "Bottom bar"
+msgstr "Barra inferior"
+
+msgid "With auto-cpufreq, the choice is saved for the current power source (charger or battery) and survives a restart."
+msgstr "Com o auto-cpufreq, a escolha é salva para a fonte de energia atual (carregador ou bateria) e se mantém ao reiniciar."
+
+msgid "System status"
+msgstr "Estado do computador"
+
+msgid "Temperature"
+msgstr "Temperatura"
+
+msgid "Battery"
+msgstr "Bateria"
+
+msgid "Charger"
+msgstr "Carregador"
+
+msgid "Free RAM"
+msgstr "RAM livre"
+
+msgid "Swap used"
+msgstr "Swap usada"
+
+msgid "Remote mode"
+msgstr "Modo remoto"
+
+msgid "Watchdog"
+msgstr "Vigilante"
+
+msgid "Click to open CPU Speed"
+msgstr "Clique para abrir a Velocidade da CPU"

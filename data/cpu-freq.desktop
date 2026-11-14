@@ -1,11 +1,20 @@
 [Desktop Entry]
 Type=Application
-Name=Velocidad del CPU
-Comment=Ver la velocidad del procesador y limitarla
+Name=CPU Speed
+Name[es]=Velocidad del CPU
+Name[pt]=Velocidade da CPU
+Name[fr]=Vitesse du processeur
+Name[de]=CPU-Geschwindigkeit
+Comment=See the processor speed and limit it
+Comment[es]=Ver la velocidad del procesador y limitarla
+Comment[pt]=Ver a velocidade do processador e limitá-la
+Comment[fr]=Voir la vitesse du processeur et la limiter
+Comment[de]=Prozessorgeschwindigkeit anzeigen und begrenzen
 Exec=cpu-freq
 Icon=cpu-freq
 Terminal=false
 Categories=System;Monitor;
-Keywords=cpu;frecuencia;turbo;temperatura;procesador;
+Keywords=cpu;frequency;speed;turbo;temperature;processor;frecuencia;velocidad;
+Keywords[es]=cpu;frecuencia;velocidad;turbo;temperatura;procesador;
 StartupNotify=true
 StartupWMClass=cpu-freq

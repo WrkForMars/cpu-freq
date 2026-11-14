@@ -1,63 +1,76 @@
 # cpu-freq
 
-Velocímetro del procesador para Linux (C + GTK3) que además deja **limitar la velocidad**
-con un clic y **controla auto-cpufreq** en lugar de pelearse con él.
+A CPU speedometer for Linux (C + GTK3) that also lets you **cap the processor speed** in one
+click, and **works with auto-cpufreq** instead of fighting it.
 
-| Claro | Oscuro |
-| --- | --- |
-| ![Tema claro](docs/captura-claro.png) | ![Tema oscuro](docs/captura-oscuro.png) |
+| Light | Dark | AMOLED (French) |
+| --- | --- | --- |
+| ![Light theme](docs/captura-claro.png) | ![Dark theme](docs/captura-oscuro.png) | ![AMOLED in French](docs/captura-amoled.png) |
 
-- Frecuencia actual (promedio de los núcleos) y modo del procesador (governor).
-- Botones de límite generados según tu procesador: **Auto**, los niveles de frecuencia y **Turbo**.
-- Temperatura (máximo CPU/GPU), batería, cargador, RAM libre y swap usada.
-- Una línea bajo los botones dice siempre el **estado real** y avisa si el sistema no respeta tu elección.
-- Sin bandeja ni proceso en segundo plano: lee cada 1.5 s solo mientras la ventana está abierta.
+- Current frequency (average of all cores) and CPU governor.
+- Limit buttons built from your processor: **Auto**, its frequency levels and **Turbo**.
+- Temperature (max of CPU/GPU), battery, charger, free RAM and used swap.
+- A line under the buttons always shows the **real state** and warns you if the system is not
+  keeping your choice.
+- **Settings**: theme (system, light, dark, AMOLED), language (English, Español, Português,
+  Français, Deutsch) and bottom bar.
 
-## Instalar
+## Bottom bar
 
-Descarga el `.deb` de [Releases](../../releases) y:
+| Option | What it does | Memory |
+| --- | --- | --- |
+| **None** (default) | The app only runs while its window is open | 0 once closed |
+| **Tray icon** | Mini speedometer in the tray (color follows temperature). Closing the window hides it; starts with your session | ~30 MB, always |
+| **Panel plugin (XFCE)** | Mini speedometer and frequency inside the XFCE panel; click to open the app | ~30 kB inside the panel |
+
+## Install
+
+Download the `.deb` files from [Releases](../../releases) and run:
 
 ```bash
 sudo apt install ./cpu-freq_*_amd64.deb
+sudo apt install ./cpu-freq-xfce_*_amd64.deb   # optional: XFCE panel plugin
 ```
 
-## Cómo funciona
+## How it works
 
-| Pulsas | Con auto-cpufreq | Sin auto-cpufreq |
+| You press | With auto-cpufreq | Without auto-cpufreq |
 | --- | --- | --- |
-| **Auto** | Devuelve la sección a tus valores originales | Quita el límite y enciende el turbo |
-| **1.4 GHz** (etc.) | Guarda `turbo = never` y `scaling_max_freq` | Escribe el límite y apaga el turbo |
-| **Turbo** | Guarda `turbo = always`, sin límite | Quita el límite y enciende el turbo |
+| **Auto** | Restores your original values for that section | Removes the limit and turns turbo on |
+| **1.4 GHz** (etc.) | Saves `turbo = never` and `scaling_max_freq` | Writes the limit and turns turbo off |
+| **Turbo** | Saves `turbo = always`, no limit | Removes the limit and turns turbo on |
 
-- Con **auto-cpufreq**, la elección se guarda en `/etc/auto-cpufreq.conf`, solo en la sección
-  de la fuente de energía actual (`[charger]` o `[battery]`), con una marca `# cpu-freq: …`.
-  auto-cpufreq vigila ese archivo y lo recarga solo; no hace falta reiniciar el servicio.
-  Antes del primer cambio se guarda una copia en `/etc/auto-cpufreq.conf.cpu-freq-orig`.
-- La regla para saber si hay cargador es la misma que usa auto-cpufreq.
-- Escribir en el sistema requiere root. Lo hace un **ayudante mínimo**
-  (`/usr/libexec/cpu-freq/ayudante`) lanzado con `pkexec`. La acción de polkit no pide
-  contraseña a la sesión local activa y la niega a sesiones remotas o inactivas.
-- El ayudante solo acepta `auto`, `turbo` o una frecuencia en kHz que el procesador admita
-  (`scaling_available_frequencies` o el rango `cpuinfo_min_freq`–`cpuinfo_max_freq`).
-  Nunca recibe rutas.
+- With **auto-cpufreq**, the choice is saved in `/etc/auto-cpufreq.conf`, only in the section
+  for the current power source (`[charger]` or `[battery]`), next to a `# cpu-freq: …` marker.
+  auto-cpufreq watches that file and reloads it on its own; the service is never restarted.
+  Before the first change, a copy is saved to `/etc/auto-cpufreq.conf.cpu-freq-orig`.
+- The app decides whether you are on the charger with the same rule auto-cpufreq uses.
+- Writing to the system needs root. A **minimal helper** (`/usr/libexec/cpu-freq/ayudante`)
+  does it through `pkexec`. The polkit action needs no password for the active local session
+  and is denied to remote or inactive sessions.
+- The helper only accepts `auto`, `turbo` or a frequency in kHz that the processor supports
+  (`scaling_available_frequencies`, or the `cpuinfo_min_freq`–`cpuinfo_max_freq` range).
+  It never takes a path.
 
-## Compatibilidad
+## Compatibility
 
-| Driver / caso | Estado |
+| Driver / case | Status |
 | --- | --- |
-| `acpi-cpufreq` (AMD Ryzen 3 3250U), Linux Mint 22.3, auto-cpufreq 3.2.0 | Probado |
-| `amd-pstate` / `amd-pstate-epp` (rango continuo, `cpufreq/boost`) | Sin probar |
-| `intel_pstate` (rango continuo, `intel_pstate/no_turbo`) | Sin probar |
-| Sección `[battery]` (portátil desconectado) | Sin probar |
-| auto-cpufreq instalado como snap | Sin probar |
-| Configuración de auto-cpufreq en `~/.config` de root | No soportado: se usa `/etc/auto-cpufreq.conf` |
+| `acpi-cpufreq` (AMD Ryzen 3 3250U), Linux Mint 22.3 XFCE, auto-cpufreq 3.2.0 | Tested |
+| XFCE 4.18 tray and panel plugin | Tested |
+| `amd-pstate` / `amd-pstate-epp` (continuous range, `cpufreq/boost`) | Not tested |
+| `intel_pstate` (continuous range, `intel_pstate/no_turbo`) | Not tested |
+| `[battery]` section (laptop unplugged) | Not tested |
+| auto-cpufreq installed as a snap | Not tested |
+| Tray icon on KDE Plasma / GNOME (no XEmbed tray) | Not supported |
+| auto-cpufreq config in root's `~/.config` | Not supported: `/etc/auto-cpufreq.conf` is used |
 
-Si lo pruebas en otro equipo, abre un issue con el resultado.
+If you try it on other hardware, please open an issue with the result.
 
-## Umbrales de color
+## Color thresholds
 
-Por defecto: temperatura alta 85 °C, crítica 95 °C, batería baja 25 %, RAM mínima 250 MB.
-Se pueden cambiar en `~/.config/cpu-freq.conf`:
+Defaults: high temperature 85 °C, critical 95 °C, low battery 25 %, minimum RAM 250 MB.
+Change them in `~/.config/cpu-freq.conf`, where the app also stores its settings:
 
 ```ini
 TEMP_AVISO=85
@@ -66,21 +79,30 @@ BATERIA_BAJA=25
 RAM_MINIMA=250
 ```
 
-## Compilar
+## Build
 
 ```bash
-sudo apt install build-essential pkg-config libgtk-3-dev librsvg2-bin dpkg-dev
-make build     # binarios en build/
-make deb       # paquete en build/
-make prueba    # prueba el ayudante sin root sobre una copia de /etc/auto-cpufreq.conf
+sudo apt install build-essential pkg-config libgtk-3-dev libxfce4panel-2.0-dev librsvg2-bin gettext dpkg-dev
+make build     # app, helper, translations and panel plugin in build/
+make deb       # cpu-freq and cpu-freq-xfce packages in build/
+make prueba    # tests the helper without root on a copy of /etc/auto-cpufreq.conf
 make clean
 ```
 
-## Memoria
+Without `libxfce4panel-2.0-dev`, everything except the panel plugin is built.
 
-Unos 33 MB de RSS con la ventana abierta. Una ventana GTK3 vacía ya ocupa ~30 MB en el mismo
-equipo, casi todo en bibliotecas compartidas con el resto del escritorio (PSS ≈ 9 MB).
+## Translations
 
-## Licencia
+UI strings are in English in the source code. Translations live in `po/<lang>.po`. To add a
+language, copy `po/cpu-freq.pot` to `po/<code>.po`, translate it and add the code to
+`IDIOMAS` in the `Makefile`. `make pot` extracts the strings again when they change.
 
-[MIT](LICENSE). No incluye código de auto-cpufreq: solo edita su archivo de configuración.
+## Memory
+
+About 33 MB RSS with the window open (the same in the background if you pick the tray icon).
+An empty GTK3 window already takes ~30 MB on the same machine, mostly libraries shared with
+the rest of the desktop (PSS ≈ 9 MB).
+
+## License
+
+[MIT](LICENSE). It contains no auto-cpufreq code: it only edits its configuration file.
