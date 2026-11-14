@@ -101,7 +101,7 @@ static gboolean refrescar(gpointer d)
 static void abrir(GtkButton *b, gpointer d)
 {
     (void)b; (void)d;
-    g_spawn_command_line_async("cpu-freq", NULL);
+    g_spawn_command_line_async("cpu-freq --alternar", NULL);   /* abre o cierra la ventana */
 }
 
 static gboolean al_cambiar_tamano(XfcePanelPlugin *plugin, gint tamano, gpointer d)

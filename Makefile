@@ -6,7 +6,7 @@
 #   make prueba   tests the helper without root on a copy of /etc/auto-cpufreq.conf
 #   make clean
 PKG      := cpu-freq
-VERSION  := 1.4.0
+VERSION  := 1.5.0
 ARCH     := amd64
 AYUDANTE := /usr/libexec/cpu-freq/ayudante
 LOCALEDIR:= /usr/share/locale

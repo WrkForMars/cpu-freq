@@ -8,6 +8,7 @@ click, and **works with auto-cpufreq** instead of fighting it.
 | ![Light theme](docs/captura-claro.png) | ![Dark theme](docs/captura-oscuro.png) | ![AMOLED in French](docs/captura-amoled.png) |
 
 - Current frequency (average of all cores) and CPU governor.
+- A graph of the last 5 minutes of frequency and temperature.
 - Limit buttons built from your processor: **Auto**, its frequency levels and **Turbo**.
 - Temperature (max of CPU/GPU), battery, charger, free RAM and used swap.
 - A line under the buttons always shows the **real state** and warns you if the system is not
@@ -21,7 +22,10 @@ click, and **works with auto-cpufreq** instead of fighting it.
 | --- | --- | --- |
 | **None** (default) | The app only runs while its window is open | 0 once closed |
 | **Tray icon** | Mini speedometer in the tray (color follows temperature). Closing the window hides it; starts with your session | ~30 MB, always |
-| **Panel plugin (XFCE)** | Mini speedometer and frequency inside the XFCE panel; click to open the app | ~30 kB inside the panel |
+| **Panel plugin (XFCE)** | Mini speedometer and frequency inside the XFCE panel | ~30 kB inside the panel |
+
+Clicking the tray icon or the panel plugin opens the window; clicking again while it is in
+front hides it (tray) or closes it.
 
 ## Install
 

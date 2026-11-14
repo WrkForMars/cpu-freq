@@ -142,7 +142,7 @@ static struct {
     GtkApplication *gapp;
     GtkWidget *ventana, *contenido, *gauge, *modo, *botones[MAX_POS], *aviso, *titulo_lim;
     GtkWidget *valor[N_FILAS], *chip[N_FILAS], *fila[N_FILAS];
-    GtkWidget *nota_ajustes;
+    GtkWidget *nota_ajustes, *grafica, *ley_ghz, *ley_temp;
     gboolean fila_fija[N_FILAS];  /* FALSE: la fila se oculta (sin scripts personales) */
     double escala;                /* GHz al final del velocímetro */
     GtkCssProvider *css;
@@ -546,7 +546,10 @@ static void aplicar_css(void)
         ".cpufreq .chip.err { background-color: %s; color: %s; }\n"
         ".cpufreq .aviso { font-size: 12px; color: %s; }\n"
         ".cpufreq .aviso.err { color: %s; }\n"
-        ".cpufreq .aviso.adv { color: %s; }\n",
+        ".cpufreq .aviso.adv { color: %s; }\n"
+        ".cpufreq .serie-ghz { color: %s; font-size: 12px; font-weight: 600; }\n"
+        ".cpufreq .serie-temp { color: %s; font-size: 12px; font-weight: 600; }\n"
+        ".cpufreq .tarjeta.historial { padding: 12px 16px; }\n",
         p->fondo, p->tinta,
         p->tinta_suave,
         p->tinta_suave,
@@ -566,7 +569,8 @@ static void aplicar_css(void)
         p->adv_suave, p->adv_tinta,
         p->err_suave, p->err_tinta,
         p->tinta_suave,
-        p->err, p->adv);
+        p->err, p->adv,
+        p->acento_texto, p->adv);
     gtk_css_provider_load_from_data(app.css, css, -1, NULL);
     g_free(css);
     if (app.gauge) gtk_widget_queue_draw(app.gauge);
@@ -776,13 +780,40 @@ static void mostrar_ventana(void)
     gtk_window_present(GTK_WINDOW(app.ventana));
 }
 
+/*
+ * Clic en el icono de la bandeja o en el complemento del panel: si la ventana está al
+ * frente, se oculta (modo bandeja) o se cierra; si no, se muestra. Al hacer clic en el
+ * panel la ventana pierde el foco justo antes, así que "al frente" incluye haberlo
+ * perdido hace menos de medio segundo.
+ */
+static gint64 foco_perdido;
+
+static gboolean al_perder_foco(GtkWidget *w, GdkEvent *e, gpointer d)
+{
+    (void)w; (void)e; (void)d;
+    foco_perdido = g_get_monotonic_time();
+    return FALSE;
+}
+
+static void alternar(void)
+{
+    gboolean al_frente = gtk_widget_get_visible(app.ventana) &&
+        (gtk_window_is_active(GTK_WINDOW(app.ventana)) ||
+         g_get_monotonic_time() - foco_perdido < G_USEC_PER_SEC / 2);
+    if (!al_frente) {
+        mostrar_ventana();
+    } else if (app.bandeja) {
+        gtk_widget_hide(app.ventana);
+        malloc_trim(0);
+    } else {
+        g_application_quit(G_APPLICATION(app.gapp));
+    }
+}
+
 static void bandeja_clic(GtkStatusIcon *i, gpointer d)
 {
     (void)i; (void)d;
-    if (gtk_widget_get_visible(app.ventana) && gtk_window_is_active(GTK_WINDOW(app.ventana)))
-        gtk_widget_hide(app.ventana);
-    else
-        mostrar_ventana();
+    alternar();
 }
 
 static void bandeja_menu(GtkStatusIcon *i, guint boton, guint tiempo, gpointer d)
@@ -840,6 +871,89 @@ static void poner_autoarranque(gboolean si)
 }
 
 /* ------------------------------------------------------------ Actualizar */
+
+/* -------------------------------------------------------------- Historial */
+
+/* Últimos 5 minutos: 200 muestras × 1.5 s. Se registra también con la ventana oculta. */
+#define HIST 200
+#define TEMP_MIN 20.0
+#define TEMP_MAX 100.0
+static struct { float ghz[HIST], temp[HIST]; int n, pos; } hist;
+
+static void registrar(const Lectura *l)
+{
+    hist.ghz[hist.pos] = (float)l->ghz;
+    hist.temp[hist.pos] = (float)l->temp;
+    hist.pos = (hist.pos + 1) % HIST;
+    if (hist.n < HIST) hist.n++;
+}
+
+/* i = 0 es la muestra más vieja que hay */
+static int hist_idx(int i) { return (hist.pos - hist.n + i + HIST) % HIST; }
+
+static void trazo(cairo_t *cr, double W, double H, const float *v, double min, double max, gboolean cerrar)
+{
+    double paso = W / (HIST - 1), x0 = W - (hist.n - 1) * paso;
+    for (int i = 0; i < hist.n; i++) {
+        double y = H - CLAMP((v[hist_idx(i)] - min) / (max - min), 0, 1) * H;
+        if (i == 0) cairo_move_to(cr, x0, y);
+        else cairo_line_to(cr, x0 + i * paso, y);
+    }
+    if (cerrar) {
+        cairo_line_to(cr, W, H);
+        cairo_line_to(cr, x0, H);
+        cairo_close_path(cr);
+    }
+}
+
+static gboolean dibujar_grafica(GtkWidget *w, cairo_t *cr, gpointer d)
+{
+    (void)d;
+    const Paleta *p = app.pal;
+    double W = gtk_widget_get_allocated_width(w), H = gtk_widget_get_allocated_height(w) - 2;
+    cairo_translate(cr, 0, 1);
+
+    /* guías: base, mitad y tope de la escala de GHz */
+    cairo_set_line_width(cr, 1);
+    rgba(cr, p->linea, 1);
+    for (int i = 0; i <= 2; i++) {
+        double y = floor(H * i / 2.0) + 0.5;
+        cairo_move_to(cr, 0, y);
+        cairo_line_to(cr, W, y);
+    }
+    cairo_stroke(cr);
+    if (hist.n < 2) return FALSE;
+
+    /* frecuencia: relleno suave y línea de acento */
+    trazo(cr, W, H, hist.ghz, 0, app.escala, TRUE);
+    rgba(cr, p->acento, 0.14);
+    cairo_fill(cr);
+    cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
+    cairo_set_line_width(cr, 2);
+    trazo(cr, W, H, hist.ghz, 0, app.escala, FALSE);
+    rgba(cr, p->acento, 1);
+    cairo_stroke(cr);
+
+    /* temperatura (20–100 °C), solo si hay sensor */
+    if (app.l.temp >= 0) {
+        cairo_set_line_width(cr, 1.5);
+        trazo(cr, W, H, hist.temp, TEMP_MIN, TEMP_MAX, FALSE);
+        rgba(cr, p->adv, 1);
+        cairo_stroke(cr);
+    }
+    return FALSE;
+}
+
+static void actualizar_grafica(void)
+{
+    if (!app.grafica) return;
+    char b[48];
+    snprintf(b, sizeof b, "● %.2f GHz", app.l.ghz);
+    gtk_label_set_text(GTK_LABEL(app.ley_ghz), b);
+    if (app.l.temp >= 0) snprintf(b, sizeof b, "● %d °C", app.l.temp);
+    gtk_label_set_text(GTK_LABEL(app.ley_temp), app.l.temp >= 0 ? b : "");
+    gtk_widget_queue_draw(app.grafica);
+}
 
 static void poner_chip(int fila, const char *txt, const char *clase)
 {
@@ -943,6 +1057,7 @@ static gboolean refrescar(gpointer d)
     Lectura *l = &app.l;
     leer_cpu(l);
     leer_temp(l);
+    registrar(l);
     actualizar_bandeja();
 
     /* Con la ventana oculta (modo bandeja) solo se lee lo que muestra el icono */
@@ -972,6 +1087,7 @@ static gboolean refrescar(gpointer d)
     gtk_widget_set_visible(app.fila[F_VIG], app.fila_fija[F_VIG]);
 
     mover_aguja(l->ghz);
+    actualizar_grafica();
 
     const char *gn = nombre_governor(l->governor);
     gchar *modo = !l->governor[0] ? g_strdup_printf(_("Mode: %s"), _("mixed"))
@@ -1227,6 +1343,27 @@ static void construir_contenido(void)
     gtk_style_context_add_class(gtk_widget_get_style_context(app.modo), "suave");
     gtk_box_pack_start(GTK_BOX(caja), app.modo, FALSE, FALSE, 0);
 
+    /* Historial: título y leyenda con los valores actuales, y la gráfica */
+    GtkWidget *hist_caja = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+    gtk_style_context_add_class(gtk_widget_get_style_context(hist_caja), "tarjeta");
+    gtk_style_context_add_class(gtk_widget_get_style_context(hist_caja), "historial");
+    gtk_widget_set_margin_top(hist_caja, 16);
+    GtkWidget *cab = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    gchar *ult = g_utf8_strup(_("Last 5 minutes"), -1);
+    gtk_box_pack_start(GTK_BOX(cab), etiqueta(ult, "etiqueta"), TRUE, TRUE, 0);
+    g_free(ult);
+    app.ley_temp = etiqueta("", "serie-temp");
+    app.ley_ghz = etiqueta("", "serie-ghz");
+    gtk_box_pack_end(GTK_BOX(cab), app.ley_temp, FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(cab), app.ley_ghz, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(hist_caja), cab, FALSE, FALSE, 0);
+    app.grafica = gtk_drawing_area_new();
+    gtk_widget_set_size_request(app.grafica, -1, 72);
+    gtk_widget_set_tooltip_text(app.grafica, _("Blue: frequency (0 to the end of the dial). Amber: temperature (20–100 °C)."));
+    g_signal_connect(app.grafica, "draw", G_CALLBACK(dibujar_grafica), NULL);
+    gtk_box_pack_start(GTK_BOX(hist_caja), app.grafica, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(caja), hist_caja, FALSE, FALSE, 0);
+
     GtkWidget *t = app.titulo_lim = etiqueta("", "etiqueta");
     gtk_widget_set_tooltip_text(t, _("With auto-cpufreq, the choice is saved for the current power source (charger or battery) and survives a restart."));
     gtk_widget_set_margin_top(t, 24);
@@ -1302,9 +1439,11 @@ static gboolean al_cerrar(GtkWidget *w, GdkEvent *e, gpointer d)
 }
 
 /* La pantalla ya existe: estilo propio y seguimiento del tema del sistema. */
+static void accion_alternar(GSimpleAction *a, GVariant *p, gpointer d);
+
 static void al_iniciar(GApplication *ga, gpointer d)
 {
-    (void)ga; (void)d;
+    (void)d;
     app.css = gtk_css_provider_new();
     gtk_style_context_add_provider_for_screen(gdk_screen_get_default(), GTK_STYLE_PROVIDER(app.css),
                                               GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
@@ -1312,6 +1451,21 @@ static void al_iniciar(GApplication *ga, gpointer d)
     GtkSettings *s = gtk_settings_get_default();
     g_signal_connect_swapped(s, "notify::gtk-theme-name", G_CALLBACK(aplicar_css), NULL);
     g_signal_connect_swapped(s, "notify::gtk-application-prefer-dark-theme", G_CALLBACK(aplicar_css), NULL);
+
+    GSimpleAction *alt = g_simple_action_new("alternar", NULL);
+    g_signal_connect(alt, "activate", G_CALLBACK(accion_alternar), NULL);
+    g_action_map_add_action(G_ACTION_MAP(ga), G_ACTION(alt));
+    g_object_unref(alt);
+}
+
+static void activar(GApplication *ga, gpointer d);
+
+/* Acción "alternar": la usa `cpu-freq --alternar` (el complemento del panel). */
+static void accion_alternar(GSimpleAction *a, GVariant *p, gpointer d)
+{
+    (void)a; (void)p; (void)d;
+    if (app.ventana) alternar();
+    else activar(G_APPLICATION(app.gapp), NULL);
 }
 
 static void activar(GApplication *ga, gpointer d)
@@ -1326,6 +1480,7 @@ static void activar(GApplication *ga, gpointer d)
     gtk_window_set_resizable(GTK_WINDOW(app.ventana), FALSE);
     gtk_style_context_add_class(gtk_widget_get_style_context(app.ventana), "cpufreq");
     g_signal_connect(app.ventana, "delete-event", G_CALLBACK(al_cerrar), NULL);
+    g_signal_connect(app.ventana, "focus-out-event", G_CALLBACK(al_perder_foco), NULL);
 
     construir_contenido();
     if (!strcmp(aj.barra, "bandeja")) poner_bandeja(TRUE);
@@ -1346,13 +1501,16 @@ int main(int argc, char **argv)
     bind_textdomain_codeset(DOMINIO, "UTF-8");
     textdomain(DOMINIO);
 
-    for (int i = 1; i < argc; i++)
-        if (!strcmp(argv[i], "--bandeja")) {
-            app.oculta_al_inicio = TRUE;
-            memmove(&argv[i], &argv[i + 1], (size_t)(argc - i) * sizeof *argv);
-            argc--;
-            break;
-        }
+    gboolean pide_alternar = FALSE;
+    for (int i = 1; i < argc; i++) {
+        gboolean *flag = !strcmp(argv[i], "--bandeja")  ? &app.oculta_al_inicio
+                       : !strcmp(argv[i], "--alternar") ? &pide_alternar : NULL;
+        if (!flag) continue;
+        *flag = TRUE;
+        memmove(&argv[i], &argv[i + 1], (size_t)(argc - i) * sizeof *argv);
+        argc--;
+        i--;
+    }
 
     app.elegido = -1;
     app.con_acf = hw_hay_auto_cpufreq();
@@ -1373,6 +1531,16 @@ int main(int argc, char **argv)
     app.gapp = gtk_application_new(APP_ID, G_APPLICATION_DEFAULT_FLAGS);
     g_signal_connect(app.gapp, "startup", G_CALLBACK(al_iniciar), NULL);
     g_signal_connect(app.gapp, "activate", G_CALLBACK(activar), NULL);
+
+    /* --alternar con la app ya abierta: se le pide que alterne su ventana y se sale */
+    if (pide_alternar && g_application_register(G_APPLICATION(app.gapp), NULL, NULL) &&
+        g_application_get_is_remote(G_APPLICATION(app.gapp))) {
+        g_action_group_activate_action(G_ACTION_GROUP(app.gapp), "alternar", NULL);
+        GDBusConnection *c = g_application_get_dbus_connection(G_APPLICATION(app.gapp));
+        if (c) g_dbus_connection_flush_sync(c, NULL, NULL);
+        g_object_unref(app.gapp);
+        return 0;
+    }
     int r = g_application_run(G_APPLICATION(app.gapp), argc, argv);
     g_object_unref(app.gapp);
     return r;

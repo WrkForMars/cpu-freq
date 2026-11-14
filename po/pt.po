@@ -1,6 +1,8 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: cpu-freq\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-11-14 01:05-0600\n"
 "PO-Revision-Date: 2026-11-14 00:00+0000\n"
 "Last-Translator: cpu-freq\n"
 "Language-Team: Portuguese\n"
@@ -9,239 +11,344 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
+#: src/cpu-freq.c:93 src/cpu-freq.c:98
 msgid "System"
 msgstr "Sistema"
 
+#: src/cpu-freq.c:93
 msgid "Light"
 msgstr "Claro"
 
+#: src/cpu-freq.c:94
 msgid "Dark"
 msgstr "Escuro"
 
+#: src/cpu-freq.c:94
 msgid "AMOLED"
 msgstr "AMOLED"
 
+#: src/cpu-freq.c:102
 msgid "None"
 msgstr "Nenhuma"
 
+#: src/cpu-freq.c:102
 msgid "Tray icon"
 msgstr "Ícone na bandeja"
 
+#: src/cpu-freq.c:103
 msgid "Panel plugin (XFCE)"
 msgstr "Plugin do painel (XFCE)"
 
+#: src/cpu-freq.c:446
 msgid "Auto"
 msgstr "Auto"
 
+#: src/cpu-freq.c:447
 msgid "Automatic"
 msgstr "Automático"
 
+#: src/cpu-freq.c:448
 msgid "auto-cpufreq decides the limit and turbo"
 msgstr "O auto-cpufreq decide o limite e o turbo"
 
+#: src/cpu-freq.c:449
 msgid "No limit: the processor uses its full range"
 msgstr "Sem limite: o processador usa toda a sua faixa"
 
+#: src/cpu-freq.c:457
+#, c-format
 msgid "Limit %s, turbo off"
 msgstr "Limite de %s, sem turbo"
 
+#: src/cpu-freq.c:457
+#, c-format
 msgid "Limit %s"
 msgstr "Limite de %s"
 
+#: src/cpu-freq.c:468 src/cpu-freq.c:772 src/panel.c:93
 msgid "Turbo"
 msgstr "Turbo"
 
+#: src/cpu-freq.c:469
+#, c-format
 msgid "%s + turbo"
 msgstr "%s + turbo"
 
+#: src/cpu-freq.c:470
 msgid "No limit, turbo always on"
 msgstr "Sem limite e com o turbo sempre ligado"
 
+#: src/cpu-freq.c:823
 msgid "Open"
 msgstr "Abrir"
 
+#: src/cpu-freq.c:824
 msgid "Quit"
 msgstr "Sair"
 
+#: src/cpu-freq.c:837 src/cpu-freq.c:863 src/cpu-freq.c:1329
 msgid "CPU Speed"
 msgstr "Velocidade da CPU"
 
+#: src/cpu-freq.c:985
 msgid "Performance"
 msgstr "Desempenho"
 
+#: src/cpu-freq.c:985
 msgid "Power saving"
 msgstr "Economia"
 
+#: src/cpu-freq.c:986
 msgid "Adaptive"
 msgstr "Adaptável"
 
+#: src/cpu-freq.c:986
 msgid "On demand"
 msgstr "Sob demanda"
 
+#: src/cpu-freq.c:987
 msgid "Conservative"
 msgstr "Conservador"
 
+#: src/cpu-freq.c:987
 msgid "Manual"
 msgstr "Manual"
 
+#: src/cpu-freq.c:995
 msgid "Charging"
 msgstr "Carregando"
 
+#: src/cpu-freq.c:996
 msgid "Discharging"
 msgstr "Descarregando"
 
+#: src/cpu-freq.c:997
 msgid "Full"
 msgstr "Cheia"
 
+#: src/cpu-freq.c:998
 msgid "Not charging"
 msgstr "Sem carregar"
 
+#: src/cpu-freq.c:1018
+#, c-format
 msgid "%.1f GHz, turbo on"
 msgstr "%.1f GHz, turbo ligado"
 
+#: src/cpu-freq.c:1019
+#, c-format
 msgid "%.1f GHz, turbo off"
 msgstr "%.1f GHz, turbo desligado"
 
+#: src/cpu-freq.c:1022
 msgid "different limits per core"
 msgstr "limites diferentes por núcleo"
 
+#: src/cpu-freq.c:1028
 msgid "Applying…"
 msgstr "Aplicando…"
 
+#: src/cpu-freq.c:1030
+#, c-format
 msgid "The system is not keeping your choice: now %s."
 msgstr "O sistema não está respeitando sua escolha: agora %s."
 
+#: src/cpu-freq.c:1033
+#, c-format
 msgid "auto-cpufreq decides · now %s."
 msgstr "O auto-cpufreq decide · agora %s."
 
+#: src/cpu-freq.c:1035
+#, c-format
 msgid "Now: %s."
 msgstr "Agora: %s."
 
+#: src/cpu-freq.c:1077
 msgid "Speed limit"
 msgstr "Limite de velocidade"
 
+#: src/cpu-freq.c:1078
 msgid "Speed limit · on charger"
 msgstr "Limite de velocidade · na tomada"
 
+#: src/cpu-freq.c:1079
 msgid "Speed limit · on battery"
 msgstr "Limite de velocidade · na bateria"
 
+#: src/cpu-freq.c:1093 src/cpu-freq.c:1095
+#, c-format
 msgid "Mode: %s"
 msgstr "Modo: %s"
 
+#: src/cpu-freq.c:1093
 msgid "mixed"
 msgstr "misto"
 
+#: src/cpu-freq.c:1094
+#, c-format
 msgid "Mode: %s (%s)"
 msgstr "Modo: %s (%s)"
 
+#: src/cpu-freq.c:1101
 msgid "Critical"
 msgstr "Crítica"
 
+#: src/cpu-freq.c:1102
 msgid "High"
 msgstr "Alta"
 
+#: src/cpu-freq.c:1103
 msgid "Normal"
 msgstr "Normal"
 
+#: src/cpu-freq.c:1105
 msgid "No sensor"
 msgstr "Sem sensor"
 
+#: src/cpu-freq.c:1113
 msgid "Low"
 msgstr "Baixa"
 
+#: src/cpu-freq.c:1116
 msgid "Not detected"
 msgstr "Não detectada"
 
+#: src/cpu-freq.c:1120
 msgid "Connected"
 msgstr "Conectado"
 
+#: src/cpu-freq.c:1120
 msgid "Disconnected"
 msgstr "Desconectado"
 
+#: src/cpu-freq.c:1121
 msgid "On battery"
 msgstr "Na bateria"
 
+#: src/cpu-freq.c:1127
 msgid "Very low"
 msgstr "Muito pouca"
 
+#: src/cpu-freq.c:1128
 msgid "Tight"
 msgstr "Justa"
 
+#: src/cpu-freq.c:1137 src/cpu-freq.c:1139 src/panel.c:94
 msgid "Active"
 msgstr "Ativo"
 
+#: src/cpu-freq.c:1137 src/panel.c:94
 msgid "Off"
 msgstr "Desligado"
 
+#: src/cpu-freq.c:1138
 msgid "No sleep"
 msgstr "Sem suspensão"
 
+#: src/cpu-freq.c:1139
 msgid "Stopped"
 msgstr "Parado"
 
+#: src/cpu-freq.c:1140
 msgid "No alerts"
 msgstr "Sem avisos"
 
+#: src/cpu-freq.c:1169
 msgid "Not applied: polkit denied permission."
 msgstr "Não aplicado: o polkit negou a permissão."
 
+#: src/cpu-freq.c:1171
+#, c-format
 msgid "Could not apply (code %d)."
 msgstr "Não foi possível aplicar (código %d)."
 
+#: src/cpu-freq.c:1184
 msgid "The helper is missing: install the cpu-freq package."
 msgstr "Falta o auxiliar: instale o pacote cpu-freq."
 
+#: src/cpu-freq.c:1196
+#, c-format
 msgid "Could not run pkexec: %s"
 msgstr "Não foi possível executar o pkexec: %s"
 
+#: src/cpu-freq.c:1243
 msgid "The XFCE panel opened so you can add the plugin."
 msgstr "O painel do XFCE foi aberto para adicionar o plugin."
 
+#: src/cpu-freq.c:1245
 msgid "Install the cpu-freq-xfce package to use the panel."
 msgstr "Instale o pacote cpu-freq-xfce para usar o painel."
 
+#: src/cpu-freq.c:1248
 msgid "When you close the window, the app stays in the tray."
 msgstr "Ao fechar a janela, o app continua na bandeja."
 
+#: src/cpu-freq.c:1294
 msgid "Settings"
 msgstr "Ajustes"
 
+#: src/cpu-freq.c:1301
 msgid "Theme"
 msgstr "Tema"
 
+#: src/cpu-freq.c:1301
 msgid "Language"
 msgstr "Idioma"
 
+#: src/cpu-freq.c:1301
 msgid "Bottom bar"
 msgstr "Barra inferior"
 
-msgid "With auto-cpufreq, the choice is saved for the current power source (charger or battery) and survives a restart."
-msgstr "Com o auto-cpufreq, a escolha é salva para a fonte de energia atual (carregador ou bateria) e se mantém ao reiniciar."
+#: src/cpu-freq.c:1352
+msgid "Last 5 minutes"
+msgstr "Últimos 5 minutos"
 
+#: src/cpu-freq.c:1362
+msgid ""
+"Blue: frequency (0 to the end of the dial). Amber: temperature (20–100 °C)."
+msgstr ""
+"Azul: frequência (de 0 ao fim do mostrador). Âmbar: temperatura (20–100 °C)."
+
+#: src/cpu-freq.c:1368
+msgid ""
+"With auto-cpufreq, the choice is saved for the current power source (charger "
+"or battery) and survives a restart."
+msgstr ""
+"Com o auto-cpufreq, a escolha é salva para a fonte de energia atual "
+"(carregador ou bateria) e se mantém ao reiniciar."
+
+#: src/cpu-freq.c:1389
 msgid "System status"
 msgstr "Estado do computador"
 
+#: src/cpu-freq.c:1399
 msgid "Temperature"
 msgstr "Temperatura"
 
+#: src/cpu-freq.c:1399
 msgid "Battery"
 msgstr "Bateria"
 
+#: src/cpu-freq.c:1399
 msgid "Charger"
 msgstr "Carregador"
 
+#: src/cpu-freq.c:1399
 msgid "Free RAM"
 msgstr "RAM livre"
 
+#: src/cpu-freq.c:1399
 msgid "Swap used"
 msgstr "Swap usada"
 
+#: src/cpu-freq.c:1400
 msgid "Remote mode"
 msgstr "Modo remoto"
 
+#: src/cpu-freq.c:1400
 msgid "Watchdog"
 msgstr "Vigilante"
 
+#: src/panel.c:95
 msgid "Click to open CPU Speed"
 msgstr "Clique para abrir a Velocidade da CPU"
