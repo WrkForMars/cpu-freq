@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Velocidad del CPU
+Comment=Ver la velocidad del procesador y limitarla
+Exec=cpu-freq
+Icon=cpu-freq
+Terminal=false
+Categories=System;Monitor;
+Keywords=cpu;frecuencia;turbo;temperatura;procesador;
+StartupNotify=true
+StartupWMClass=cpu-freq
