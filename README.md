@@ -28,7 +28,7 @@ On short screens it switches to two columns:
 | Option | What it does | Memory |
 | --- | --- | --- |
 | **None** (default) | The app only runs while its window is open | 0 once closed |
-| **Tray icon** | Mini speedometer in the tray (color follows temperature). Closing the window hides it; starts with your session | ~30 MB, always |
+| **Tray icon** | Mini speedometer in the tray (color follows temperature). Closing the window hides it; starts with your session. XEmbed trays (XFCE, MATE, Cinnamon) or StatusNotifierItem (KDE, GNOME with the AppIndicator extension, Wayland) | ~30 MB, always |
 | **Panel plugin (XFCE)** | Mini speedometer and frequency inside the XFCE panel | ~30 kB inside the panel |
 
 Clicking the tray icon or the panel plugin opens the window; clicking again while it is in
@@ -39,10 +39,20 @@ or Turbo without opening the window.
 
 Download the `.deb` files from [Releases](../../releases) and run:
 
+**Debian, Ubuntu, Linux Mint:** download the `.deb` files from [Releases](../../releases) and run:
+
 ```bash
 sudo apt install ./cpu-freq_*_amd64.deb
 sudo apt install ./cpu-freq-xfce_*_amd64.deb   # optional: XFCE panel plugin
 ```
+
+**Arch Linux:** a `PKGBUILD` is in [`packaging/arch/`](packaging/arch/PKGBUILD). Copy it to an
+empty folder and run `makepkg -si`.
+
+**Other distributions:** see [Build](#build); `make install` takes `PREFIX`, `LIBEXECDIR`,
+`PLUGDIR` and `DESTDIR`.
+
+See [CHANGELOG.md](CHANGELOG.md) for what changed in each version.
 
 ## How it works
 
@@ -74,7 +84,9 @@ sudo apt install ./cpu-freq-xfce_*_amd64.deb   # optional: XFCE panel plugin
 | `intel_pstate` (continuous range, `intel_pstate/no_turbo`) | Not tested |
 | `[battery]` section (laptop unplugged) | Not tested |
 | auto-cpufreq installed as a snap | Not tested |
-| Tray icon on KDE Plasma / GNOME (no XEmbed tray) | Not supported |
+| Tray icon through StatusNotifierItem (needs `libayatana-appindicator3`) | Tested on XFCE's SNI host |
+| Tray icon on KDE Plasma and GNOME (AppIndicator extension) | Not tested |
+| Arch Linux PKGBUILD | Install paths tested; `makepkg` not tested |
 | auto-cpufreq config in root's `~/.config` | Not supported: `/etc/auto-cpufreq.conf` is used |
 
 If you try it on other hardware, please open an issue with the result.
@@ -95,13 +107,17 @@ RAM_MINIMA=250
 
 ```bash
 sudo apt install build-essential pkg-config libgtk-3-dev libxfce4panel-2.0-dev librsvg2-bin gettext dpkg-dev
-make build     # app, helper, translations and panel plugin in build/
-make deb       # cpu-freq and cpu-freq-xfce packages in build/
+make build     # app, helper, translations, icons and panel plugin in build/
 make test      # 67 checks of the root helper, without root, against fake sysfs trees
+make deb       # cpu-freq and cpu-freq-xfce packages in build/
+sudo make install install-xfce   # or install straight into /usr
 make clean
 ```
 
-Without `libxfce4panel-2.0-dev`, everything except the panel plugin is built.
+Without `libxfce4panel-2.0-dev`, everything except the panel plugin is built. Paths can be
+changed with `PREFIX`, `LIBEXECDIR`, `PLUGDIR`, `LICENSEDIR` and `DESTDIR`; the helper path is
+compiled into the app and the plugin and written into the polkit action, so pass the same
+values to `build` and `install`.
 
 `make test` builds a test-only copy of the helper whose system paths point at
 `build/prueba/raiz`, then checks it against fake trees: the argument whitelist, charger and

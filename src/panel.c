@@ -1,8 +1,8 @@
 /*
- * Complemento del panel de XFCE: mini velocímetro con la frecuencia del CPU.
- * Corre dentro del panel (sin proceso aparte), lee cada 2 s; el clic abre o cierra la
- * app cpu-freq y el menú del clic derecho elige el límite (Auto, niveles, Turbo) llamando
- * al mismo ayudante con pkexec. Comparte la detección de hardware con la app (hw.h).
+ * XFCE panel plugin: a mini speedometer with the CPU frequency.
+ * Runs inside the panel (no extra process) and reads every 2 s. A click opens or closes
+ * the cpu-freq app; the right-click menu picks the limit (Auto, levels, Turbo) by calling
+ * the same helper through pkexec. Shares hardware detection with the app (hw.h).
  */
 #define _GNU_SOURCE
 #include <libxfce4panel/libxfce4panel.h>
@@ -30,7 +30,7 @@ typedef struct {
     guint timer;
     double ghz, escala;
     int turbo;
-    /* menú de límites: 0 = Auto, luego niveles, al final Turbo si hay */
+    /* limit menu: 0 = Auto, then the levels, Turbo last if available */
     GtkWidget *items[MAX_POS];
     char args[MAX_POS][16];
     long khz[MAX_POS];
@@ -59,7 +59,7 @@ static double angulo(const Panel *p, double ghz)
     return A0 + CLAMP(ghz / p->escala, 0, 1) * BARRIDO;
 }
 
-/* Mismo dibujo que el icono de bandeja: pista, valor en azul y aguja del color del texto. */
+/* Same drawing as the tray icon: track, value in blue and a needle in the text color. */
 static gboolean dibujar(GtkWidget *w, cairo_t *cr, gpointer d)
 {
     Panel *p = d;
@@ -75,7 +75,7 @@ static gboolean dibujar(GtkWidget *w, cairo_t *cr, gpointer d)
     cairo_set_source_rgba(cr, tinta.red, tinta.green, tinta.blue, 0.3);
     cairo_arc(cr, cx, cy, r, A0, A0 + BARRIDO);
     cairo_stroke(cr);
-    cairo_set_source_rgb(cr, 0x25 / 255.0, 0x63 / 255.0, 0xEB / 255.0);   /* acento #2563EB */
+    cairo_set_source_rgb(cr, 0x25 / 255.0, 0x63 / 255.0, 0xEB / 255.0);   /* accent #2563EB */
     cairo_arc(cr, cx, cy, r, A0, angulo(p, p->ghz));
     cairo_stroke(cr);
 
@@ -90,7 +90,7 @@ static gboolean dibujar(GtkWidget *w, cairo_t *cr, gpointer d)
     return FALSE;
 }
 
-/* Posición elegida: la marca de auto-cpufreq o, sin él, la que coincide con el sistema. */
+/* Chosen position: auto-cpufreq's marker or, without it, the one matching the system. */
 static int posicion_actual(const Panel *p)
 {
     if (hw_hay_auto_cpufreq()) {
@@ -152,7 +152,7 @@ static void al_elegir(GtkCheckMenuItem *it, gpointer d)
     marcar_menu(p);
 }
 
-/* Añade "Speed limit", Auto, los niveles y Turbo al principio del menú del panel. */
+/* Adds "Speed limit", Auto, the levels and Turbo at the top of the panel menu. */
 static void crear_menu(Panel *p)
 {
     HwFrec h;
@@ -179,7 +179,7 @@ static void crear_menu(Panel *p)
         p->npos++;
     }
 
-    /* xfce_panel_plugin_menu_insert_item añade arriba: se insertan en orden inverso */
+    /* xfce_panel_plugin_menu_insert_item adds at the top: insert in reverse order */
     GtkWidget *sep = gtk_separator_menu_item_new();
     gtk_widget_show(sep);
     xfce_panel_plugin_menu_insert_item(p->plugin, GTK_MENU_ITEM(sep));
@@ -223,7 +223,7 @@ static gboolean refrescar(gpointer d)
 static void abrir(GtkButton *b, gpointer d)
 {
     (void)b; (void)d;
-    g_spawn_command_line_async("cpu-freq --alternar", NULL);   /* abre o cierra la ventana */
+    g_spawn_command_line_async("cpu-freq --alternar", NULL);   /* opens or closes the window */
 }
 
 static gboolean al_cambiar_tamano(XfcePanelPlugin *plugin, gint tamano, gpointer d)
@@ -238,7 +238,7 @@ static gboolean al_cambiar_tamano(XfcePanelPlugin *plugin, gint tamano, gpointer
 static void al_cambiar_modo(XfcePanelPlugin *plugin, XfcePanelPluginMode modo, gpointer d)
 {
     Panel *p = d;
-    /* En paneles verticales el texto no cabe: solo el velocímetro */
+    /* The text does not fit on vertical panels: speedometer only */
     gtk_widget_set_visible(p->etiqueta, modo == XFCE_PANEL_PLUGIN_MODE_HORIZONTAL);
     al_cambiar_tamano(plugin, xfce_panel_plugin_get_size(plugin), p);
 }

@@ -1,0 +1,47 @@
+# Maintainer: Marcel <WrkForMars@users.noreply.github.com>
+#
+# Split package: cpu-freq (the app) and cpu-freq-xfce (the XFCE panel plugin).
+# Build locally with:  makepkg -si
+# For the AUR, also run:  makepkg --printsrcinfo > .SRCINFO
+
+pkgbase=cpu-freq
+pkgname=(cpu-freq cpu-freq-xfce)
+pkgver=1.7.0
+pkgrel=1
+pkgdesc='CPU speedometer and speed limiter that works with auto-cpufreq'
+arch=('x86_64')
+url='https://github.com/WrkForMars/cpu-freq'
+license=('MIT')
+makedepends=('gtk3' 'libx11' 'xfce4-panel' 'librsvg' 'gettext' 'pkgconf')
+checkdepends=('bash')
+source=("$pkgbase-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+_paths=(PREFIX=/usr LIBEXECDIR=/usr/lib PLUGDIR=/usr/lib/xfce4/panel/plugins
+        LICENSEDIR=/usr/share/licenses/cpu-freq STRIP=)
+
+build() {
+  cd "$pkgbase-$pkgver"
+  make "${_paths[@]}" build
+}
+
+check() {
+  cd "$pkgbase-$pkgver"
+  make test
+}
+
+package_cpu-freq() {
+  depends=('gtk3' 'libx11' 'polkit')
+  optdepends=('auto-cpufreq: the speed limit is saved in its configuration'
+              'libayatana-appindicator: tray icon on KDE Plasma, GNOME and Wayland'
+              'cpu-freq-xfce: XFCE panel plugin')
+  cd "$pkgbase-$pkgver"
+  make "${_paths[@]}" DESTDIR="$pkgdir" install
+}
+
+package_cpu-freq-xfce() {
+  pkgdesc='XFCE panel plugin for cpu-freq'
+  depends=("cpu-freq=$pkgver" 'xfce4-panel')
+  cd "$pkgbase-$pkgver"
+  make "${_paths[@]}" DESTDIR="$pkgdir" install-xfce
+}

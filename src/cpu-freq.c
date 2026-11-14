@@ -1,22 +1,29 @@
 /*
- * cpu-freq: velocímetro del procesador y límite de velocidad.
+ * cpu-freq: CPU speedometer and speed limiter.
  *
- * Por defecto es una sola ventana que lee sysfs/proc solo mientras está abierta y
- * termina al cerrarla. En Ajustes se puede elegir:
- *   - Tema: sistema, claro, oscuro o AMOLED (negro puro).
- *   - Idioma: sistema, español, inglés, portugués, francés o alemán (gettext).
- *   - Barra inferior: ninguna, icono en la bandeja (la app sigue corriendo al cerrar
- *     la ventana y arranca con la sesión) o complemento del panel de XFCE
- *     (paquete cpu-freq-xfce, corre dentro del panel).
- * Los ajustes se guardan en ~/.config/cpu-freq.conf.
+ * By default a single window that reads sysfs/proc only while it is open and exits when
+ * closed. Settings offer:
+ *   - Theme: system, light, dark or AMOLED (pure black).
+ *   - Language: system, Spanish, English, Portuguese, French or German (gettext).
+ *   - Bottom bar: none, a tray icon (the app keeps running after the window is closed and
+ *     starts with the session) or the XFCE panel plugin (cpu-freq-xfce package, runs
+ *     inside the panel).
+ * Settings are stored in ~/.config/cpu-freq.conf.
  *
- * Las posiciones (Auto, niveles de frecuencia y Turbo) salen del hardware (hw.h).
- * Para escribir llama a AYUDANTE con pkexec; si auto-cpufreq está instalado, el
- * ayudante guarda la elección en su configuración.
+ * The positions (Auto, frequency levels and Turbo) come from the hardware (hw.h).
+ * To write, it runs AYUDANTE through pkexec; if auto-cpufreq is installed, the helper
+ * saves the choice in its configuration.
+ *
+ * Identifiers are in Spanish (the project started that way); comments and UI strings are
+ * in English.
  */
 #define _GNU_SOURCE
 #include <gtk/gtk.h>
 #include <glib/gstdio.h>
+#include <dlfcn.h>
+#ifdef GDK_WINDOWING_X11
+#include <gdk/gdkx.h>
+#endif
 #include <ctype.h>
 #include <dirent.h>
 #include <glob.h>
@@ -47,9 +54,9 @@
 #define ANIM_US       180000
 #define MSG_ERROR_S   6
 
-extern int _nl_msg_cat_cntr;   /* glibc: incrementarlo invalida la caché de gettext */
+extern int _nl_msg_cat_cntr;   /* glibc: bumping it invalidates gettext's cache */
 
-/* ------------------------------------------------------------------ Paleta */
+/* ---------------------------------------------------------------- Palette */
 
 typedef struct {
     const char *fondo, *superficie, *linea, *borde, *tinta, *tinta_suave;
@@ -59,9 +66,9 @@ typedef struct {
     const char *err, *err_suave, *err_tinta;
 } Paleta;
 
-/* Un solo acento azul (#2563EB). Contrastes verificados en los tres temas:
- * tinta ≥17:1, tinta suave ≥7.6:1, acento/fondo ≥3.7:1, texto sobre acento 5.2:1,
- * bordes de control ≥3.5:1, texto de chips ≥8:1. */
+/* A single blue accent (#2563EB). Contrast checked in all three themes:
+ * ink ≥17:1, soft ink ≥7.6:1, accent/background ≥3.7:1, text on accent 5.2:1,
+ * control borders ≥3.5:1, chip text ≥8:1. */
 static const Paleta CLARO = {
     "#F7F8FA", "#FFFFFF", "#DDE1E7", "#808A99", "#0F1720", "#4A5565",
     "#2563EB", "#FFFFFF", "#1D4ED8", "#E3ECFD",
@@ -76,7 +83,7 @@ static const Paleta OSCURO = {
     "#FBBF24", "#2E2410", "#FDE68A",
     "#F87171", "#321616", "#FECACA",
 };
-/* AMOLED: negro puro de fondo; las superficies se separan con borde, no con gris. */
+/* AMOLED: pure black background; surfaces are separated by borders, not gray. */
 static const Paleta AMOLED = {
     "#000000", "#000000", "#262626", "#737373", "#F5F5F5", "#A3A3A3",
     "#2563EB", "#FFFFFF", "#7AA7FF", "#0F1A33",
@@ -85,7 +92,7 @@ static const Paleta AMOLED = {
     "#F87171", "#2A0F0F", "#FECACA",
 };
 
-/* ----------------------------------------------------------------- Ajustes */
+/* --------------------------------------------------------------- Settings */
 
 typedef struct { const char *id, *nombre; } Opcion;
 
@@ -93,7 +100,7 @@ static const Opcion TEMAS[] = {
     { "sistema", N_("System") }, { "claro", N_("Light") },
     { "oscuro", N_("Dark") },   { "amoled", N_("AMOLED") },
 };
-/* Los nombres de idioma van en su propio idioma: no se traducen. */
+/* Language names are written in their own language: not translated. */
 static const Opcion IDIOMAS[] = {
     { "sistema", N_("System") }, { "es", "Español" }, { "en", "English" },
     { "pt", "Português" }, { "fr", "Français" }, { "de", "Deutsch" },
@@ -104,29 +111,29 @@ static const Opcion BARRAS[] = {
 };
 
 static struct { char tema[12], idioma[12], barra[12]; } aj = { "sistema", "sistema", "ninguna" };
-static gchar *language_original;   /* LANGUAGE al arrancar, para volver a "Sistema" */
+static gchar *language_original;   /* LANGUAGE at startup, to go back to "System" */
 
-/* ------------------------------------------------------------- Posiciones */
+/* -------------------------------------------------------------- Positions */
 
 #define MAX_POS (HW_MAX_NIVEL + 2)
 typedef struct { char arg[16], etiqueta[16], nombre[40], ayuda[96]; long khz; int boost; } Posicion;
-static Posicion POS[MAX_POS];     /* 0 = Auto; luego niveles; al final Turbo si hay */
+static Posicion POS[MAX_POS];     /* 0 = Auto; then the levels; Turbo last if available */
 static int NPOS;
 static HwFrec hw;
-static long tope_sin_turbo;       /* nivel más alto sin turbo (kHz) */
-static int turbo_pos = -1;        /* índice de Turbo, -1 si el equipo no tiene */
+static long tope_sin_turbo;       /* highest level without turbo (kHz) */
+static int turbo_pos = -1;        /* Turbo's index, -1 if the machine has none */
 
-/* ---------------------------------------------------------------- Estado */
+/* ------------------------------------------------------------------ State */
 
 typedef struct {
-    double ghz;            /* promedio de scaling_cur_freq */
-    long   max_khz;        /* scaling_max_freq si todos coinciden, -1 si no */
-    int    boost;          /* 0/1, -1 si no hay turbo */
+    double ghz;            /* average of scaling_cur_freq */
+    long   max_khz;        /* scaling_max_freq if all policies agree, -1 otherwise */
+    int    boost;          /* 0/1, -1 if there is no turbo */
     char   governor[32];
-    int    temp;           /* °C, -1 si no hay */
-    int    bat;            /* %, -1 si no hay batería */
+    int    temp;           /* °C, -1 if none */
+    int    bat;            /* %, -1 if there is no battery */
     char   bat_estado[32];
-    int    cargador;       /* 1/0, misma regla que auto-cpufreq */
+    int    cargador;       /* 1/0, same rule as auto-cpufreq */
     int    hay_bateria, hay_externa;
     long   ram_mb, swap_mb;
     int    remoto, vigilante;
@@ -143,15 +150,15 @@ static struct {
     GtkWidget *ventana, *contenido, *gauge, *modo, *botones[MAX_POS], *aviso, *titulo_lim;
     GtkWidget *valor[N_FILAS], *chip[N_FILAS], *fila[N_FILAS];
     GtkWidget *nota_ajustes, *grafica, *ley_ghz, *ley_temp;
-    gboolean fila_fija[N_FILAS];  /* FALSE: la fila se oculta (sin scripts personales) */
-    double escala;                /* GHz al final del velocímetro */
+    gboolean fila_fija[N_FILAS];  /* FALSE: the row is hidden (no personal scripts) */
+    double escala;                /* GHz at the end of the dial */
     GtkCssProvider *css;
     const Paleta *pal;
     Lectura l;
-    int elegido;           /* posición elegida: marca en auto-cpufreq o, sin él, la de esta sesión */
+    int elegido;           /* chosen position: auto-cpufreq marker or, without it, this session's */
     gboolean con_acf;      /* auto-cpufreq instalado */
-    int discrepa;          /* refrescos seguidos en que el sistema no coincide con lo elegido */
-    int real;              /* posición que coincide con el sistema, -1 ninguna */
+    int discrepa;          /* consecutive refreshes in which the system does not match the choice */
+    int real;              /* position matching the system, -1 none */
     gboolean actualizando, aplicando;
     char error[160];
     gint64 error_hasta;
@@ -160,10 +167,10 @@ static struct {
     guint anim_id, timer;
     gboolean primera, oculta_al_inicio;
     GtkStatusIcon *bandeja;
-    char bandeja_firma[32];       /* evita redibujar el icono si no cambió */
+    char bandeja_firma[32];       /* avoids redrawing the icon when nothing changed */
 } app;
 
-/* --------------------------------------------------------------- Lecturas */
+/* --------------------------------------------------------------- Readings */
 
 static gboolean leer_linea(const char *ruta, char *buf, size_t n)
 {
@@ -187,8 +194,8 @@ static gboolean leer_long(const char *ruta, long *v)
 static gchar *ruta_conf(void) { return g_build_filename(g_get_user_config_dir(), "cpu-freq.conf", NULL); }
 
 /*
- * Umbrales: ~/.config/modo-remoto.conf y luego ~/.config/cpu-freq.conf (gana el último).
- * De esos archivos solo se leen estas claves; el resto (p. ej. un tema de ntfy) se ignora.
+ * Thresholds: ~/.config/modo-remoto.conf, then ~/.config/cpu-freq.conf (the last one wins).
+ * Only these keys are read; everything else in those files (e.g. an ntfy topic) is ignored.
  */
 static void leer_conf_de(const char *nombre, gboolean con_ajustes)
 {
@@ -223,7 +230,7 @@ static void leer_conf_de(const char *nombre, gboolean con_ajustes)
             size_t n = strlen(textos[i].k);
             if (strncmp(p, textos[i].k, n) != 0) continue;
             char *v = g_strstrip(p + n);
-            for (size_t j = 0; j < textos[i].nops; j++)        /* solo valores conocidos */
+            for (size_t j = 0; j < textos[i].nops; j++)        /* known values only */
                 if (!strcmp(v, textos[i].ops[j].id)) g_strlcpy(textos[i].v, v, textos[i].n);
         }
     }
@@ -236,7 +243,7 @@ static void leer_conf(void)
     leer_conf_de("cpu-freq.conf", TRUE);
 }
 
-/* Reescribe TEMA/IDIOMA/BARRA en ~/.config/cpu-freq.conf conservando lo demás. */
+/* Rewrites TEMA/IDIOMA/BARRA in ~/.config/cpu-freq.conf, keeping everything else. */
 static void guardar_ajustes(void)
 {
     gchar *ruta = ruta_conf(), *viejo = NULL;
@@ -296,7 +303,7 @@ static void leer_cpu(Lectura *l)
     l->boost = hw_turbo();
 }
 
-/* Igual que vigilante-laptop: máximo de temp*_input en sensores de CPU/GPU. */
+/* Same as vigilante-laptop: max of temp*_input over CPU/GPU sensors. */
 static void leer_temp(Lectura *l)
 {
     glob_t g;
@@ -356,9 +363,10 @@ static void leer_memoria(Lectura *l)
 }
 
 /*
- * Mismas señales que `modo-remoto estado`, sin ejecutarlo (su salida incluye el tema ntfy):
- *  - remoto: hay un proceso systemd-inhibit --what=sleep:idle:handle-lid-switch
- *  - vigilante: la unidad de usuario vigilante-laptop.service tiene procesos
+ * Same signals as `modo-remoto estado`, without running it (its output includes the ntfy
+ * topic):
+ *  - remote: a systemd-inhibit --what=sleep:idle:handle-lid-switch process exists
+ *  - watchdog: the vigilante-laptop.service user unit has processes
  */
 static void leer_remoto(Lectura *l)
 {
@@ -400,7 +408,7 @@ static void leer_remoto(Lectura *l)
     }
 }
 
-/* La elección vive en auto-cpufreq: marca "# cpu-freq: X" en [charger] o [battery]. */
+/* The choice lives in auto-cpufreq: "# cpu-freq: X" marker in [charger] or [battery]. */
 static void leer_eleccion(const Lectura *l)
 {
     if (!app.con_acf) return;
@@ -418,7 +426,7 @@ static void leer_eleccion(const Lectura *l)
         } else if (!strcmp(sec, buscada) && !strncmp(p, HW_MARCA, strlen(HW_MARCA))) {
             p = g_strstrip(p + strlen(HW_MARCA));
             char khz[16];
-            if (strchr(p, '.')) {   /* marca de la versión 1.1: "1.4" en GHz */
+            if (strchr(p, '.')) {   /* marker from version 1.1: "1.4" in GHz */
                 snprintf(khz, sizeof khz, "%ld", lround(g_ascii_strtod(p, NULL) * 1e6));
                 p = khz;
             }
@@ -428,7 +436,7 @@ static void leer_eleccion(const Lectura *l)
     fclose(f);
 }
 
-/* ¿La posición i coincide con lo que hay en el sistema? */
+/* Does position i match what the system has? */
 static gboolean coincide(int i, const Lectura *l)
 {
     if (i == turbo_pos) return l->boost == 1 && l->max_khz >= tope_sin_turbo;
@@ -471,12 +479,12 @@ static void crear_posiciones(void)
         p->khz = 0;
         p->boost = 1;
     }
-    /* Escala: siguiente entero por encima del máximo, +1 para que se vea el turbo */
+    /* Scale: next integer above the max, +1 so the turbo zone shows */
     if (app.escala <= 0)
         app.escala = MAX(2.0, ceil(MAX(hw.max, tope_sin_turbo) / 1e6) + (turbo ? 1 : 0));
 }
 
-/* ---------------------------------------------------------- Idioma y tema */
+/* --------------------------------------------------------- Language/theme */
 
 static void aplicar_idioma(void)
 {
@@ -584,7 +592,7 @@ static void rgba(cairo_t *cr, const char *hex, double alfa)
     cairo_set_source_rgba(cr, c.red, c.green, c.blue, alfa);
 }
 
-/* ------------------------------------------------------------ Velocímetro */
+/* ----------------------------------------------------------- Speedometer */
 
 #define A0 (0.75 * G_PI)
 #define BARRIDO (1.5 * G_PI)
@@ -623,7 +631,7 @@ static gboolean dibujar(GtkWidget *w, cairo_t *cr, gpointer d)
     cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
     cairo_set_line_width(cr, grosor);
 
-    /* pista y zona turbo (por encima del tope sin turbo) */
+    /* track and turbo zone (above the top without turbo) */
     rgba(cr, p->linea, 1);
     cairo_arc(cr, cx, cy, r, A0, A0 + BARRIDO);
     cairo_stroke(cr);
@@ -634,13 +642,13 @@ static gboolean dibujar(GtkWidget *w, cairo_t *cr, gpointer d)
         cairo_stroke(cr);
     }
 
-    /* valor */
+    /* value */
     cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
     rgba(cr, p->acento, 1);
     cairo_arc(cr, cx, cy, r, A0, angulo(app.mostrado));
     cairo_stroke(cr);
 
-    /* marcas cada 0.5 GHz, números en los enteros */
+    /* ticks every 0.5 GHz, numbers on whole GHz */
     cairo_set_line_cap(cr, CAIRO_LINE_CAP_BUTT);
     for (int i = 0; i <= (int)(app.escala * 2); i++) {
         double a = angulo(i / 2.0), largo = (i % 2) ? 4 : 8;
@@ -659,7 +667,7 @@ static gboolean dibujar(GtkWidget *w, cairo_t *cr, gpointer d)
         }
     }
 
-    /* límite actual (sin turbo): raya corta sobre la pista */
+    /* current limit (without turbo): short mark across the track */
     if (app.l.max_khz > 0 && app.l.boost != 1) {
         double a = angulo(app.l.max_khz / 1e6);
         cairo_set_line_width(cr, 3);
@@ -669,7 +677,7 @@ static gboolean dibujar(GtkWidget *w, cairo_t *cr, gpointer d)
         cairo_stroke(cr);
     }
 
-    /* aguja */
+    /* needle */
     double a = angulo(app.mostrado), ra = r - grosor - 26;
     cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
     cairo_set_line_width(cr, 3);
@@ -680,7 +688,7 @@ static gboolean dibujar(GtkWidget *w, cairo_t *cr, gpointer d)
     cairo_arc(cr, cx, cy, 6, 0, 2 * G_PI);
     cairo_fill(cr);
 
-    /* lectura */
+    /* reading */
     char num[16];
     snprintf(num, sizeof num, "%.2f", app.l.ghz);
     texto(w, cr, num, 40, PANGO_WEIGHT_BOLD, cx, cy + r * 0.52, p->tinta, 0.5);
@@ -706,7 +714,7 @@ static gboolean animar(GtkWidget *w, GdkFrameClock *reloj, gpointer d)
 
 static void mover_aguja(double ghz)
 {
-    if (ghz > app.escala) app.escala = ceil(ghz);   /* nunca se sale del dial */
+    if (ghz > app.escala) app.escala = ceil(ghz);   /* never goes past the dial */
     gboolean anim = FALSE;
     g_object_get(gtk_settings_get_default(), "gtk-enable-animations", &anim, NULL);
     if (!anim || app.primera || !gtk_widget_get_mapped(app.gauge)) {
@@ -720,9 +728,95 @@ static void mover_aguja(double ghz)
     if (!app.anim_id) app.anim_id = gtk_widget_add_tick_callback(app.gauge, animar, NULL, NULL);
 }
 
-/* ---------------------------------------------------------------- Bandeja */
+/* ------------------------------------------------------------------- Tray */
 
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS   /* GtkStatusIcon: lo que entiende la bandeja (XEmbed) */
+/*
+ * Two tray backends, picked at runtime:
+ *  - XEmbed (GtkStatusIcon): XFCE, MATE, Cinnamon... Left click toggles the window,
+ *    right click opens the menu.
+ *  - StatusNotifierItem through libayatana-appindicator3, loaded with dlopen only when
+ *    needed (KDE Plasma, GNOME with the AppIndicator extension, Wayland sessions). The
+ *    icon is a PNG redrawn in $XDG_RUNTIME_DIR/cpu-freq; every click opens the menu,
+ *    which therefore also has "Show or hide the window".
+ * XEmbed is used when an XEmbed tray exists; otherwise StatusNotifierItem if a watcher
+ * is running. CPU_FREQ_BANDEJA=xembed|sni forces one.
+ */
+
+typedef struct _AppIndicator AppIndicator;   /* opaque: only used through dlsym'd functions */
+enum { AI_CATEGORY_HARDWARE = 3, AI_STATUS_PASSIVE = 0, AI_STATUS_ACTIVE = 1 };
+static struct {
+    void *lib;
+    AppIndicator *(*nuevo)(const char *, const char *, int);
+    void (*estado)(AppIndicator *, int);
+    void (*menu)(AppIndicator *, GtkMenu *);
+    void (*ruta_tema)(AppIndicator *, const char *);
+    void (*icono)(AppIndicator *, const char *, const char *);
+    void (*titulo)(AppIndicator *, const char *);
+    AppIndicator *ind;
+    GtkWidget *menu_actual;
+    char firma_menu[32];
+    int nombre;                  /* alternates the PNG name so hosts reload it */
+} sni;
+
+static gboolean cargar_sni(void)
+{
+    if (sni.lib) return TRUE;
+    const char *libs[] = { "libayatana-appindicator3.so.1", "libappindicator3.so.1" };
+    for (size_t i = 0; i < G_N_ELEMENTS(libs) && !sni.lib; i++)
+        sni.lib = dlopen(libs[i], RTLD_LAZY | RTLD_LOCAL);
+    if (!sni.lib) return FALSE;
+    *(void **)&sni.nuevo = dlsym(sni.lib, "app_indicator_new");
+    *(void **)&sni.estado = dlsym(sni.lib, "app_indicator_set_status");
+    *(void **)&sni.menu = dlsym(sni.lib, "app_indicator_set_menu");
+    *(void **)&sni.ruta_tema = dlsym(sni.lib, "app_indicator_set_icon_theme_path");
+    *(void **)&sni.icono = dlsym(sni.lib, "app_indicator_set_icon_full");
+    *(void **)&sni.titulo = dlsym(sni.lib, "app_indicator_set_title");
+    if (!sni.nuevo || !sni.estado || !sni.menu || !sni.ruta_tema || !sni.icono) {
+        dlclose(sni.lib);
+        sni.lib = NULL;
+        return FALSE;
+    }
+    return TRUE;
+}
+
+/* Does the X11 screen have an XEmbed tray (selection _NET_SYSTEM_TRAY_Sn owned)? */
+static gboolean hay_xembed(void)
+{
+#ifdef GDK_WINDOWING_X11
+    GdkDisplay *d = gdk_display_get_default();
+    if (d && GDK_IS_X11_DISPLAY(d)) {
+        Display *x = GDK_DISPLAY_XDISPLAY(d);
+        char n[32];
+        snprintf(n, sizeof n, "_NET_SYSTEM_TRAY_S%d", DefaultScreen(x));
+        return XGetSelectionOwner(x, XInternAtom(x, n, False)) != None;
+    }
+#endif
+    return FALSE;
+}
+
+/* Is a StatusNotifierWatcher (KDE, GNOME extension, XFCE systray...) on the session bus? */
+static gboolean hay_sni(void)
+{
+    GDBusConnection *c = g_application_get_dbus_connection(G_APPLICATION(app.gapp));
+    if (!c) return FALSE;
+    GVariant *r = g_dbus_connection_call_sync(c, "org.freedesktop.DBus", "/org/freedesktop/DBus",
+                                              "org.freedesktop.DBus", "NameHasOwner",
+                                              g_variant_new("(s)", "org.kde.StatusNotifierWatcher"),
+                                              G_VARIANT_TYPE("(b)"), G_DBUS_CALL_FLAGS_NONE, 500, NULL, NULL);
+    gboolean hay = FALSE;
+    if (r) { g_variant_get(r, "(b)", &hay); g_variant_unref(r); }
+    return hay;
+}
+
+static gboolean usar_sni(void)
+{
+    const char *e = g_getenv("CPU_FREQ_BANDEJA");
+    if (e && !strcmp(e, "xembed")) return FALSE;
+    if (e && !strcmp(e, "sni")) return cargar_sni();
+    return !hay_xembed() && hay_sni() && cargar_sni();
+}
+
+static gboolean bandeja_activa(void) { return app.bandeja || sni.ind; }
 
 static const char *color_estado(const Lectura *l)
 {
@@ -731,47 +825,36 @@ static const char *color_estado(const Lectura *l)
     return app.pal->acento;
 }
 
-/* Mini velocímetro: anillo con el valor y aguja; color según temperatura. */
-static void actualizar_bandeja(void)
+/* Mini speedometer: ring with the value and a needle, colored by temperature. */
+static cairo_surface_t *dibujar_icono(int s, const Lectura *l)
 {
-    if (!app.bandeja) return;
-    const Lectura *l = &app.l;
-    int s = gtk_status_icon_get_size(app.bandeja);
-    if (s < 16) s = 22;
-    const char *color = color_estado(l);
-    char firma[32];
-    snprintf(firma, sizeof firma, "%d|%.1f|%s", s, l->ghz, color);
-    if (strcmp(firma, app.bandeja_firma) != 0) {
-        g_strlcpy(app.bandeja_firma, firma, sizeof app.bandeja_firma);
-        cairo_surface_t *sf = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, s, s);
-        cairo_t *cr = cairo_create(sf);
-        double cx = s / 2.0, cy = s / 2.0 + s * 0.06, r = s * 0.40, g = MAX(2.0, s * 0.14);
-        cairo_set_line_width(cr, g);
-        cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
-        cairo_set_source_rgba(cr, 0.5, 0.5, 0.5, 0.45);
-        cairo_arc(cr, cx, cy, r, A0, A0 + BARRIDO);
-        cairo_stroke(cr);
-        rgba(cr, color, 1);
-        cairo_arc(cr, cx, cy, r, A0, angulo(l->ghz));
-        cairo_stroke(cr);
-        double a = angulo(l->ghz);
-        cairo_set_line_width(cr, MAX(1.5, s * 0.09));
-        cairo_move_to(cr, cx, cy);
-        cairo_line_to(cr, cx + r * 0.7 * cos(a), cy + r * 0.7 * sin(a));
-        cairo_stroke(cr);
-        cairo_arc(cr, cx, cy, MAX(1.5, s * 0.08), 0, 2 * G_PI);
-        cairo_fill(cr);
-        cairo_destroy(cr);
-        GdkPixbuf *pb = gdk_pixbuf_get_from_surface(sf, 0, 0, s, s);
-        gtk_status_icon_set_from_pixbuf(app.bandeja, pb);
-        g_object_unref(pb);
-        cairo_surface_destroy(sf);
-    }
-    char t[128];
-    int n = snprintf(t, sizeof t, "%.2f GHz", l->ghz);
-    if (l->boost == 1) n += snprintf(t + n, sizeof t - (size_t)n, " · %s", _("Turbo"));
-    if (l->temp >= 0) snprintf(t + n, sizeof t - (size_t)n, " · %d °C", l->temp);
-    gtk_status_icon_set_tooltip_text(app.bandeja, t);
+    cairo_surface_t *sf = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, s, s);
+    cairo_t *cr = cairo_create(sf);
+    double cx = s / 2.0, cy = s / 2.0 + s * 0.06, r = s * 0.40, g = MAX(2.0, s * 0.14);
+    cairo_set_line_width(cr, g);
+    cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+    cairo_set_source_rgba(cr, 0.5, 0.5, 0.5, 0.45);
+    cairo_arc(cr, cx, cy, r, A0, A0 + BARRIDO);
+    cairo_stroke(cr);
+    rgba(cr, color_estado(l), 1);
+    cairo_arc(cr, cx, cy, r, A0, angulo(l->ghz));
+    cairo_stroke(cr);
+    double a = angulo(l->ghz);
+    cairo_set_line_width(cr, MAX(1.5, s * 0.09));
+    cairo_move_to(cr, cx, cy);
+    cairo_line_to(cr, cx + r * 0.7 * cos(a), cy + r * 0.7 * sin(a));
+    cairo_stroke(cr);
+    cairo_arc(cr, cx, cy, MAX(1.5, s * 0.08), 0, 2 * G_PI);
+    cairo_fill(cr);
+    cairo_destroy(cr);
+    return sf;
+}
+
+static void texto_bandeja(char *t, size_t n, const Lectura *l)
+{
+    int k = snprintf(t, n, "%.2f GHz", l->ghz);
+    if (l->boost == 1) k += snprintf(t + k, n - (size_t)k, " · %s", _("Turbo"));
+    if (l->temp >= 0) snprintf(t + k, n - (size_t)k, " · %d °C", l->temp);
 }
 
 static void mostrar_ventana(void)
@@ -781,10 +864,9 @@ static void mostrar_ventana(void)
 }
 
 /*
- * Clic en el icono de la bandeja o en el complemento del panel: si la ventana está al
- * frente, se oculta (modo bandeja) o se cierra; si no, se muestra. Al hacer clic en el
- * panel la ventana pierde el foco justo antes, así que "al frente" incluye haberlo
- * perdido hace menos de medio segundo.
+ * Click on the tray icon or the panel plugin: if the window is in front it is hidden
+ * (tray mode) or closed; otherwise it is shown. Clicking the panel takes the focus away
+ * from the window just before, so "in front" includes having lost it < 0.5 s ago.
  */
 static gint64 foco_perdido;
 
@@ -802,7 +884,7 @@ static void alternar(void)
          g_get_monotonic_time() - foco_perdido < G_USEC_PER_SEC / 2);
     if (!al_frente) {
         mostrar_ventana();
-    } else if (app.bandeja) {
+    } else if (bandeja_activa()) {
         gtk_widget_hide(app.ventana);
         malloc_trim(0);
     } else {
@@ -810,10 +892,11 @@ static void alternar(void)
     }
 }
 
-static void bandeja_clic(GtkStatusIcon *i, gpointer d)
+/* SNI hosts focus their own menu first, so "in front" is just "visible" there. */
+static void sni_mostrar_ocultar(void)
 {
-    (void)i; (void)d;
-    alternar();
+    if (gtk_widget_get_visible(app.ventana)) { gtk_widget_hide(app.ventana); malloc_trim(0); }
+    else mostrar_ventana();
 }
 
 static void aplicar(int pos);
@@ -823,18 +906,26 @@ static void menu_posicion(GtkCheckMenuItem *it, gpointer d)
     if (gtk_check_menu_item_get_active(it)) aplicar(GPOINTER_TO_INT(d));
 }
 
-/* Clic derecho: elegir el límite sin abrir la ventana, abrir o salir. */
-static void bandeja_menu(GtkStatusIcon *i, guint boton, guint tiempo, gpointer d)
+/* Position currently chosen (re-read: the window may be hidden and not refreshing). */
+static int posicion_marcada(void)
 {
-    (void)d;
-    /* La ventana puede estar oculta: releer qué está elegido ahora */
     leer_energia(&app.l);
     leer_eleccion(&app.l);
     app.real = -1;
     for (int k = 1; k < NPOS; k++) if (coincide(k, &app.l)) app.real = k;
-    int marcado = app.con_acf ? app.elegido : app.real;
+    return app.con_acf ? app.elegido : app.real;
+}
 
+/* Tray menu: [Show or hide], "Speed limit", Auto / levels / Turbo, Open (XEmbed), Quit. */
+static GtkWidget *crear_menu_bandeja(gboolean con_mostrar, int marcado)
+{
     GtkWidget *m = gtk_menu_new();
+    if (con_mostrar) {
+        GtkWidget *mo = gtk_menu_item_new_with_label(_("Show or hide the window"));
+        g_signal_connect_swapped(mo, "activate", G_CALLBACK(sni_mostrar_ocultar), NULL);
+        gtk_menu_shell_append(GTK_MENU_SHELL(m), mo);
+        gtk_menu_shell_append(GTK_MENU_SHELL(m), gtk_separator_menu_item_new());
+    }
     GtkWidget *tit = gtk_menu_item_new_with_label(_("Speed limit"));
     gtk_widget_set_sensitive(tit, FALSE);
     gtk_menu_shell_append(GTK_MENU_SHELL(m), tit);
@@ -849,38 +940,126 @@ static void bandeja_menu(GtkStatusIcon *i, guint boton, guint tiempo, gpointer d
         gtk_menu_shell_append(GTK_MENU_SHELL(m), it);
     }
     gtk_menu_shell_append(GTK_MENU_SHELL(m), gtk_separator_menu_item_new());
-    g_signal_connect(m, "selection-done", G_CALLBACK(gtk_widget_destroy), NULL);
-    GtkWidget *abrir = gtk_menu_item_new_with_label(_("Open"));
+    if (!con_mostrar) {
+        GtkWidget *abrir = gtk_menu_item_new_with_label(_("Open"));
+        g_signal_connect_swapped(abrir, "activate", G_CALLBACK(mostrar_ventana), NULL);
+        gtk_menu_shell_append(GTK_MENU_SHELL(m), abrir);
+    }
     GtkWidget *salir = gtk_menu_item_new_with_label(_("Quit"));
-    g_signal_connect_swapped(abrir, "activate", G_CALLBACK(mostrar_ventana), NULL);
     g_signal_connect_swapped(salir, "activate", G_CALLBACK(g_application_quit), app.gapp);
-    gtk_menu_shell_append(GTK_MENU_SHELL(m), abrir);
     gtk_menu_shell_append(GTK_MENU_SHELL(m), salir);
     gtk_widget_show_all(m);
+    return m;
+}
+
+/* Called on every refresh (also with the window hidden). */
+static void actualizar_bandeja(void)
+{
+    const Lectura *l = &app.l;
+    char firma[48], t[128];
+    texto_bandeja(t, sizeof t, l);
+
+    G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+    if (app.bandeja) {
+        int s = gtk_status_icon_get_size(app.bandeja);
+        if (s < 16) s = 22;
+        snprintf(firma, sizeof firma, "%d|%.1f|%s", s, l->ghz, color_estado(l));
+        if (strcmp(firma, app.bandeja_firma) != 0) {
+            g_strlcpy(app.bandeja_firma, firma, sizeof app.bandeja_firma);
+            cairo_surface_t *sf = dibujar_icono(s, l);
+            GdkPixbuf *pb = gdk_pixbuf_get_from_surface(sf, 0, 0, s, s);
+            gtk_status_icon_set_from_pixbuf(app.bandeja, pb);
+            g_object_unref(pb);
+            cairo_surface_destroy(sf);
+        }
+        gtk_status_icon_set_tooltip_text(app.bandeja, t);
+    }
+    G_GNUC_END_IGNORE_DEPRECATIONS
+
+    if (sni.ind) {
+        snprintf(firma, sizeof firma, "%.1f|%s", l->ghz, color_estado(l));
+        if (strcmp(firma, app.bandeja_firma) != 0) {
+            g_strlcpy(app.bandeja_firma, firma, sizeof app.bandeja_firma);
+            gchar *dir = g_build_filename(g_get_user_runtime_dir(), "cpu-freq", NULL);
+            char nombre[32];
+            snprintf(nombre, sizeof nombre, "cpu-freq-tray-%d", sni.nombre ^= 1);
+            gchar *png = g_strdup_printf("%s/%s.png", dir, nombre);
+            cairo_surface_t *sf = dibujar_icono(64, l);
+            if (cairo_surface_write_to_png(sf, png) == CAIRO_STATUS_SUCCESS)
+                sni.icono(sni.ind, nombre, t);
+            cairo_surface_destroy(sf);
+            g_free(png);
+            g_free(dir);
+        }
+        if (sni.titulo) sni.titulo(sni.ind, t);
+        /* The menu lives on the host side: rebuild it when the choice changes */
+        int marcado = posicion_marcada();
+        snprintf(firma, sizeof firma, "%d|%d|%d", marcado, app.aplicando, NPOS);
+        if (strcmp(firma, sni.firma_menu) != 0) {
+            g_strlcpy(sni.firma_menu, firma, sizeof sni.firma_menu);
+            GtkWidget *viejo = sni.menu_actual;
+            sni.menu_actual = g_object_ref_sink(crear_menu_bandeja(TRUE, marcado));
+            sni.menu(sni.ind, GTK_MENU(sni.menu_actual));
+            if (viejo) { gtk_widget_destroy(viejo); g_object_unref(viejo); }
+        }
+    }
+}
+
+G_GNUC_BEGIN_IGNORE_DEPRECATIONS   /* GtkStatusIcon is deprecated but is what XEmbed trays use */
+
+static void bandeja_clic(GtkStatusIcon *i, gpointer d)
+{
+    (void)i; (void)d;
+    alternar();
+}
+
+static void bandeja_menu(GtkStatusIcon *i, guint boton, guint tiempo, gpointer d)
+{
+    (void)d;
+    GtkWidget *m = crear_menu_bandeja(FALSE, posicion_marcada());
+    g_signal_connect(m, "selection-done", G_CALLBACK(gtk_widget_destroy), NULL);
     gtk_menu_popup(GTK_MENU(m), NULL, NULL, gtk_status_icon_position_menu, i, boton, tiempo);
 }
 
 static void poner_bandeja(gboolean si)
 {
-    if (si && !app.bandeja) {
-        app.bandeja = gtk_status_icon_new();
-        gtk_status_icon_set_title(app.bandeja, _("CPU Speed"));
-        g_signal_connect(app.bandeja, "activate", G_CALLBACK(bandeja_clic), NULL);
-        g_signal_connect(app.bandeja, "popup-menu", G_CALLBACK(bandeja_menu), NULL);
-        g_signal_connect_swapped(app.bandeja, "size-changed", G_CALLBACK(actualizar_bandeja), NULL);
-        g_application_hold(G_APPLICATION(app.gapp));
+    if (si && !bandeja_activa()) {
         app.bandeja_firma[0] = '\0';
-        actualizar_bandeja();
-    } else if (!si && app.bandeja) {
-        g_object_unref(app.bandeja);
-        app.bandeja = NULL;
+        if (usar_sni()) {
+            gchar *dir = g_build_filename(g_get_user_runtime_dir(), "cpu-freq", NULL);
+            g_mkdir_with_parents(dir, 0700);
+            sni.ind = sni.nuevo(APP_ID, "cpu-freq", AI_CATEGORY_HARDWARE);
+            sni.ruta_tema(sni.ind, dir);
+            g_free(dir);
+            sni.firma_menu[0] = '\0';
+            actualizar_bandeja();             /* draws the icon and sets the menu */
+            sni.estado(sni.ind, AI_STATUS_ACTIVE);
+        } else {
+            app.bandeja = gtk_status_icon_new();
+            gtk_status_icon_set_title(app.bandeja, _("CPU Speed"));
+            g_signal_connect(app.bandeja, "activate", G_CALLBACK(bandeja_clic), NULL);
+            g_signal_connect(app.bandeja, "popup-menu", G_CALLBACK(bandeja_menu), NULL);
+            g_signal_connect_swapped(app.bandeja, "size-changed", G_CALLBACK(actualizar_bandeja), NULL);
+            actualizar_bandeja();
+        }
+        g_application_hold(G_APPLICATION(app.gapp));
+    } else if (!si && bandeja_activa()) {
+        if (app.bandeja) {
+            g_object_unref(app.bandeja);
+            app.bandeja = NULL;
+        } else {
+            sni.estado(sni.ind, AI_STATUS_PASSIVE);
+            g_object_unref(sni.ind);
+            sni.ind = NULL;
+            if (sni.menu_actual) { gtk_widget_destroy(sni.menu_actual); g_object_unref(sni.menu_actual); sni.menu_actual = NULL; }
+        }
         g_application_release(G_APPLICATION(app.gapp));
     }
 }
 
 G_GNUC_END_IGNORE_DEPRECATIONS
 
-/* Arranque con la sesión: solo en modo bandeja. */
+/* Start with the session: tray mode only. */
 static void poner_autoarranque(gboolean si)
 {
     gchar *dir = g_build_filename(g_get_user_config_dir(), "autostart", NULL);
@@ -900,11 +1079,11 @@ static void poner_autoarranque(gboolean si)
     g_free(dir);
 }
 
-/* ------------------------------------------------------------ Actualizar */
+/* ----------------------------------------------------------------- Update */
 
-/* -------------------------------------------------------------- Historial */
+/* ---------------------------------------------------------------- History */
 
-/* Últimos 5 minutos: 200 muestras × 1.5 s. Se registra también con la ventana oculta. */
+/* Last 5 minutes: 200 samples × 1.5 s. Also recorded while the window is hidden. */
 #define HIST 200
 #define TEMP_MIN 20.0
 #define TEMP_MAX 100.0
@@ -918,7 +1097,7 @@ static void registrar(const Lectura *l)
     if (hist.n < HIST) hist.n++;
 }
 
-/* i = 0 es la muestra más vieja que hay */
+/* i = 0 is the oldest sample available */
 static int hist_idx(int i) { return (hist.pos - hist.n + i + HIST) % HIST; }
 
 static void trazo(cairo_t *cr, double W, double H, const float *v, double min, double max, gboolean cerrar)
@@ -945,7 +1124,7 @@ static gboolean dibujar_grafica(GtkWidget *w, cairo_t *cr, gpointer d)
     double W = gtk_widget_get_allocated_width(w), H = gtk_widget_get_allocated_height(w) - 2;
     cairo_translate(cr, 0, 1);
 
-    /* guías: base, mitad y tope de la escala de GHz */
+    /* guides: bottom, middle and top of the GHz scale */
     cairo_set_line_width(cr, 1);
     rgba(cr, p->linea, 1);
     for (int i = 0; i <= 2; i++) {
@@ -956,7 +1135,7 @@ static gboolean dibujar_grafica(GtkWidget *w, cairo_t *cr, gpointer d)
     cairo_stroke(cr);
     if (hist.n < 2) return FALSE;
 
-    /* frecuencia: relleno suave y línea de acento */
+    /* frequency: soft fill and accent line */
     trazo(cr, W, H, hist.ghz, 0, app.escala, TRUE);
     rgba(cr, p->acento, 0.14);
     cairo_fill(cr);
@@ -966,7 +1145,7 @@ static gboolean dibujar_grafica(GtkWidget *w, cairo_t *cr, gpointer d)
     rgba(cr, p->acento, 1);
     cairo_stroke(cr);
 
-    /* promedio de frecuencia: línea discontinua */
+    /* average frequency: dashed line */
     double g, t, pico;
     hist_resumen(&g, &t, &pico);
     double ym = floor(H - CLAMP(g / app.escala, 0, 1) * H) + 0.5, guion[] = { 4, 3 };
@@ -978,7 +1157,7 @@ static gboolean dibujar_grafica(GtkWidget *w, cairo_t *cr, gpointer d)
     cairo_stroke(cr);
     cairo_set_dash(cr, NULL, 0, 0);
 
-    /* temperatura (20–100 °C), solo si hay sensor */
+    /* temperature (20–100 °C), only with a sensor */
     if (app.l.temp >= 0) {
         cairo_set_line_width(cr, 1.5);
         trazo(cr, W, H, hist.temp, TEMP_MIN, TEMP_MAX, FALSE);
@@ -988,7 +1167,7 @@ static gboolean dibujar_grafica(GtkWidget *w, cairo_t *cr, gpointer d)
     return FALSE;
 }
 
-/* Promedio de frecuencia y promedio/máximo de temperatura de lo que hay en el historial */
+/* Average frequency and average/peak temperature over the history */
 static void hist_resumen(double *ghz, double *temp, double *pico)
 {
     double sg = 0, st = 0;
@@ -1003,7 +1182,7 @@ static void hist_resumen(double *ghz, double *temp, double *pico)
     *temp = nt ? st / nt : -1;
 }
 
-/* La leyenda resume la ventana (promedios y pico); el valor actual ya está arriba. */
+/* The legend summarizes the window (averages and peak); the current value is already above. */
 static void actualizar_grafica(void)
 {
     if (!app.grafica) return;
@@ -1103,8 +1282,8 @@ static void actualizar_aviso(void)
 static void actualizar_botones(void)
 {
     app.actualizando = TRUE;
-    /* Con auto-cpufreq se marca lo elegido (la línea de abajo dice el estado real);
-       sin él, el estado real. */
+    /* With auto-cpufreq the choice is marked (the line below states the real state);
+       without it, the real state. */
     int marcado = app.con_acf ? app.elegido : app.real;
     for (int i = 0; i < NPOS; i++) {
         gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(app.botones[i]), i == marcado);
@@ -1122,7 +1301,7 @@ static gboolean refrescar(gpointer d)
     registrar(l);
     actualizar_bandeja();
 
-    /* Con la ventana oculta (modo bandeja) solo se lee lo que muestra el icono */
+    /* With the window hidden (tray mode) only what the icon shows is read */
     if (!app.contenido || !gtk_widget_get_visible(app.ventana)) return G_SOURCE_CONTINUE;
 
     leer_energia(l);
@@ -1142,7 +1321,7 @@ static gboolean refrescar(gpointer d)
     gtk_label_set_text(GTK_LABEL(app.titulo_lim), tit);
     g_free(tit);
 
-    /* Filas que dependen del equipo: batería y cargador solo en portátiles */
+    /* Hardware-dependent rows: battery and charger only on laptops */
     gtk_widget_set_visible(app.fila[F_BAT], portatil);
     gtk_widget_set_visible(app.fila[F_CARG], portatil);
     gtk_widget_set_visible(app.fila[F_REMOTO], app.fila_fija[F_REMOTO]);
@@ -1201,7 +1380,7 @@ static gboolean refrescar(gpointer d)
     poner_valor(F_VIG, "%s", l->vigilante ? _("Active") : _("Stopped"));
     poner_chip(F_VIG, l->vigilante ? NULL : _("No alerts"), "adv");
 
-    /* La última fila visible no lleva línea inferior */
+    /* The last visible row has no bottom line */
     for (int i = N_FILAS - 1, ultima = 1; i >= 0; i--) {
         GtkStyleContext *sc = gtk_widget_get_style_context(app.fila[i]);
         if (ultima && gtk_widget_get_visible(app.fila[i])) { gtk_style_context_add_class(sc, "ultima"); ultima = 0; }
@@ -1214,7 +1393,7 @@ static gboolean refrescar(gpointer d)
     return G_SOURCE_CONTINUE;
 }
 
-/* --------------------------------------------------------------- Aplicar */
+/* ------------------------------------------------------------------ Apply */
 
 static void ayudante_termino(GPid pid, gint estado, gpointer d)
 {
@@ -1223,7 +1402,7 @@ static void ayudante_termino(GPid pid, gint estado, gpointer d)
     app.aplicando = FALSE;
     app.error[0] = '\0';
     if (WIFEXITED(estado) && WEXITSTATUS(estado) == 0) {
-        if (!app.con_acf) app.elegido = pos;   /* con auto-cpufreq se relee de su archivo */
+        if (!app.con_acf) app.elegido = pos;   /* with auto-cpufreq it is re-read from its file */
         app.discrepa = 0;
     } else {
         int c = WIFEXITED(estado) ? WEXITSTATUS(estado) : -1;
@@ -1236,7 +1415,7 @@ static void ayudante_termino(GPid pid, gint estado, gpointer d)
     refrescar(NULL);
 }
 
-/* Aplica la posición pos con el ayudante (botones y menú de la bandeja). */
+/* Applies position pos through the helper (buttons and tray menu). */
 static void aplicar(int pos)
 {
     if (app.aplicando || pos < 0 || pos >= NPOS) return;
@@ -1272,7 +1451,7 @@ static void al_pulsar(GtkToggleButton *b, gpointer d)
     aplicar(GPOINTER_TO_INT(d));
 }
 
-/* --------------------------------------------------------------- Ventana */
+/* ----------------------------------------------------------------- Window */
 
 static void construir_contenido(void);
 
@@ -1301,8 +1480,8 @@ static void cambiar_barra(const char *id)
     const char *nota = NULL;
     if (!strcmp(id, "panel")) {
         if (g_file_test(PLUGIN_PANEL, G_FILE_TEST_EXISTS)) {
-            /* Si ya está, no se duplica. Un panel que arrancó antes de instalar el
-               complemento no lo conoce: en ese caso se reinicia y se vuelve a añadir. */
+            /* Never added twice. A panel started before the plugin was installed does not
+               know it yet: in that case the panel is restarted and it is added again. */
             gchar *argv[] = { "/bin/sh", "-c",
                 "esta() { xfconf-query -c xfce4-panel -p /plugins -lv | grep -q ' cpu-freq-panel$'; }; "
                 "esta && exit 0; xfce4-panel --add=cpu-freq-panel; sleep 2; esta && exit 0; "
@@ -1332,7 +1511,7 @@ static void al_cambiar_ajuste(GtkComboBox *c, gpointer d)
         if (!strcmp(aj.idioma, id)) return;
         g_strlcpy(aj.idioma, id, sizeof aj.idioma);
         aplicar_idioma();
-        g_idle_add(reconstruir, NULL);   /* no destruir el combo dentro de su propia señal */
+        g_idle_add(reconstruir, NULL);   /* do not destroy the combo inside its own signal */
         break;
     case 2:
         cambiar_barra(id);
@@ -1347,7 +1526,7 @@ static GtkWidget *combo(const Opcion *ops, size_t n, const char *activo, int cua
     gchar *xfce = cual == 2 ? g_find_program_in_path("xfce4-panel") : NULL;
     for (size_t i = 0; i < n; i++) {
         if (cual == 2 && !strcmp(ops[i].id, "panel") && !xfce)
-            continue;   /* sin XFCE no se ofrece el complemento */
+            continue;   /* without XFCE the plugin is not offered */
         gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(c), ops[i].id, _(ops[i].nombre));
     }
     g_free(xfce);
@@ -1389,8 +1568,8 @@ static GtkWidget *crear_ajustes(void)
 }
 
 /*
- * Pantallas bajas (área útil < 980 px, p. ej. 1366×768): dos columnas, ~560 px de alto.
- * CPU_FREQ_COMPACTO=1/0 lo fuerza (para probar).
+ * Short screens (usable height < 980 px, e.g. 1366×768): two columns, ~510 px tall.
+ * CPU_FREQ_COMPACTO=1/0 forces it (for testing).
  */
 static gboolean es_compacto(void)
 {
@@ -1413,7 +1592,7 @@ static void construir_contenido(void)
     crear_posiciones();
     gtk_window_set_title(GTK_WINDOW(app.ventana), _("CPU Speed"));
 
-    /* caja: velocímetro e historial; der: límite y estado. En pantallas altas son la misma */
+    /* caja: speedometer and history; der: limit and status. On tall screens they are the same box */
     gboolean compacto = es_compacto();
     GtkWidget *raiz = app.contenido = gtk_box_new(compacto ? GTK_ORIENTATION_HORIZONTAL
                                                            : GTK_ORIENTATION_VERTICAL, 32);
@@ -1442,7 +1621,7 @@ static void construir_contenido(void)
     gtk_style_context_add_class(gtk_widget_get_style_context(app.modo), "suave");
     gtk_box_pack_start(GTK_BOX(caja), app.modo, FALSE, FALSE, 0);
 
-    /* Historial: título y leyenda con los valores actuales, y la gráfica */
+    /* History: title and legend (5-minute summary), then the graph */
     GtkWidget *hist_caja = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
     gtk_style_context_add_class(gtk_widget_get_style_context(hist_caja), "tarjeta");
     gtk_style_context_add_class(gtk_widget_get_style_context(hist_caja), "historial");
@@ -1465,7 +1644,7 @@ static void construir_contenido(void)
 
     GtkWidget *t = app.titulo_lim = etiqueta("", "etiqueta");
     gtk_widget_set_tooltip_text(t, _("With auto-cpufreq, the choice is saved for the current power source (charger or battery) and survives a restart."));
-    gtk_widget_set_margin_top(t, compacto ? 44 : 24);   /* compacto: alineado con el dial */
+    gtk_widget_set_margin_top(t, compacto ? 44 : 24);   /* compact: aligned with the dial */
     gtk_widget_set_margin_bottom(t, 8);
     gtk_box_pack_start(GTK_BOX(der), t, FALSE, FALSE, 0);
 
@@ -1525,11 +1704,11 @@ static void construir_contenido(void)
     for (int i = 0; i < N_FILAS; i++) gtk_widget_hide(app.chip[i]);
 }
 
-/* En modo bandeja, cerrar la ventana solo la oculta. */
+/* In tray mode, closing the window only hides it. */
 static gboolean al_cerrar(GtkWidget *w, GdkEvent *e, gpointer d)
 {
     (void)e; (void)d;
-    if (app.bandeja) {
+    if (bandeja_activa()) {
         gtk_widget_hide(w);
         malloc_trim(0);
         return TRUE;
@@ -1537,7 +1716,7 @@ static gboolean al_cerrar(GtkWidget *w, GdkEvent *e, gpointer d)
     return FALSE;
 }
 
-/* La pantalla ya existe: estilo propio y seguimiento del tema del sistema. */
+/* The screen exists now: own stylesheet and following the system theme. */
 static void accion_alternar(GSimpleAction *a, GVariant *p, gpointer d);
 
 static void al_iniciar(GApplication *ga, gpointer d)
@@ -1559,7 +1738,7 @@ static void al_iniciar(GApplication *ga, gpointer d)
 
 static void activar(GApplication *ga, gpointer d);
 
-/* Acción "alternar": la usa `cpu-freq --alternar` (el complemento del panel). */
+/* "alternar" (toggle) action: used by `cpu-freq --alternar` (the panel plugin). */
 static void accion_alternar(GSimpleAction *a, GVariant *p, gpointer d)
 {
     (void)a; (void)p; (void)d;
@@ -1585,8 +1764,8 @@ static void activar(GApplication *ga, gpointer d)
     if (!strcmp(aj.barra, "bandeja")) poner_bandeja(TRUE);
     refrescar(NULL);
     app.timer = g_timeout_add(REFRESCO_MS, refrescar, NULL);
-    /* --bandeja (autoarranque): empezar oculta solo si el modo bandeja sigue elegido */
-    if (!(app.oculta_al_inicio && app.bandeja)) gtk_widget_show(app.ventana);
+    /* --bandeja (autostart): start hidden only if tray mode is still selected */
+    if (!(app.oculta_al_inicio && bandeja_activa())) gtk_widget_show(app.ventana);
     malloc_trim(0);
 }
 
@@ -1595,7 +1774,7 @@ int main(int argc, char **argv)
     g_set_prgname("cpu-freq");
     setlocale(LC_ALL, "");
     language_original = g_strdup(g_getenv("LANGUAGE"));
-    const char *ld = g_getenv("CPU_FREQ_LOCALEDIR");   /* para probar sin instalar */
+    const char *ld = g_getenv("CPU_FREQ_LOCALEDIR");   /* to test without installing */
     bindtextdomain(DOMINIO, ld ? ld : LOCALEDIR);
     bind_textdomain_codeset(DOMINIO, "UTF-8");
     textdomain(DOMINIO);
@@ -1617,7 +1796,7 @@ int main(int argc, char **argv)
     aplicar_idioma();
     setlocale(LC_NUMERIC, "C");
 
-    /* Filas personales: solo si existen los scripts modo-remoto / vigilante-laptop */
+    /* Personal rows: only if the modo-remoto / vigilante-laptop scripts exist */
     gchar *mr = g_find_program_in_path("modo-remoto");
     gchar *mr2 = g_build_filename(g_get_home_dir(), ".local", "bin", "modo-remoto", NULL);
     gchar *vg = g_find_program_in_path("vigilante-laptop");
@@ -1631,7 +1810,7 @@ int main(int argc, char **argv)
     g_signal_connect(app.gapp, "startup", G_CALLBACK(al_iniciar), NULL);
     g_signal_connect(app.gapp, "activate", G_CALLBACK(activar), NULL);
 
-    /* --alternar con la app ya abierta: se le pide que alterne su ventana y se sale */
+    /* --alternar with the app already running: ask it to toggle its window, then exit */
     if (pide_alternar && g_application_register(G_APPLICATION(app.gapp), NULL, NULL) &&
         g_application_get_is_remote(G_APPLICATION(app.gapp))) {
         g_action_group_activate_action(G_ACTION_GROUP(app.gapp), "alternar", NULL);

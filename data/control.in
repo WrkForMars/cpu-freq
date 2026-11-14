@@ -4,7 +4,7 @@ Architecture: @ARCH@
 Maintainer: @MAINT@
 Installed-Size: @SIZE@
 Depends: @SHLIBS@, pkexec | policykit-1
-Recommends: auto-cpufreq
+Recommends: auto-cpufreq, libayatana-appindicator3-1
 Suggests: cpu-freq-xfce
 Section: utils
 Priority: optional

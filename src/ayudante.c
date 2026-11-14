@@ -1,21 +1,21 @@
 /*
- * ayudante: fija el límite de velocidad del CPU. Se ejecuta como root vía pkexec.
+ * ayudante ("helper"): sets the CPU speed limit. Runs as root through pkexec.
  *
- * Argumento único, validado:
- *   auto      deja que auto-cpufreq decida (o, sin él, quita el límite y enciende el turbo)
- *   turbo     sin límite y con el turbo siempre encendido
- *   <kHz>     límite máximo sin turbo; debe ser una frecuencia que admita el hardware
- *             (scaling_available_frequencies o el rango cpuinfo_min..max)
- * Nunca recibe rutas: todas son fijas.
+ * A single, validated argument:
+ *   auto      lets auto-cpufreq decide (or, without it, removes the limit and turns turbo on)
+ *   turbo     no limit, turbo always on
+ *   <kHz>     max limit without turbo; must be a frequency the hardware supports
+ *             (scaling_available_frequencies or the cpuinfo_min..max range)
+ * It never takes a path: every path is fixed.
  *
- * Si auto-cpufreq está instalado, la elección se guarda en la sección de la fuente de
- * energía actual ([charger] o [battery]) de su configuración, con la marca
- * "# cpu-freq: <valor>". auto-cpufreq vigila el archivo y lo recarga solo.
- * Antes del primer cambio se guarda una copia en RESPALDO; "auto" restaura los
- * valores originales de turbo y scaling_max_freq de esa sección.
- * Además se escribe sysfs directamente para que el cambio sea inmediato.
+ * If auto-cpufreq is installed, the choice is saved in the section of its configuration
+ * for the current power source ([charger] or [battery]), with a "# cpu-freq: <value>"
+ * marker. auto-cpufreq watches the file and reloads it on its own.
+ * Before the first change a copy is saved to RESPALDO; "auto" restores that section's
+ * original turbo and scaling_max_freq values.
+ * sysfs is also written directly so the change is immediate.
  *
- * Códigos de salida: 0 bien · 1 fallo · 2 argumento no válido · 3 no es root
+ * Exit codes: 0 ok · 1 failure · 2 invalid argument · 3 not root
  */
 #define _GNU_SOURCE
 #include <errno.h>
@@ -30,7 +30,7 @@
 
 static int escribir(const char *ruta, const char *valor)
 {
-    /* O_TRUNC no afecta a sysfs y deja limpios los archivos falsos de las pruebas */
+    /* O_TRUNC does nothing to sysfs and keeps the tests' fake files clean */
     int fd = open(ruta, O_WRONLY | O_TRUNC | O_NOFOLLOW | O_CLOEXEC);
     if (fd < 0) {
         fprintf(stderr, "cpu-freq helper: cannot open %s: %s\n", ruta, strerror(errno));
@@ -47,7 +47,7 @@ static int escribir(const char *ruta, const char *valor)
     return 0;
 }
 
-/* Lee un archivo regular completo (máx. MAX_CONF). Si no existe devuelve "" (ENOENT). */
+/* Reads a whole regular file (max MAX_CONF). Returns "" if it does not exist (ENOENT). */
 static char *leer_archivo(const char *ruta)
 {
     int fd = open(ruta, O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
@@ -73,7 +73,7 @@ static int guardar(const char *ruta, const char *texto, int excl)
     return (close(fd) == 0 && ok) ? 0 : -1;
 }
 
-/* ¿La línea [l, fin) es "turbo = ..." o "scaling_max_freq = ..."? */
+/* Is the line [l, fin) "turbo = ..." or "scaling_max_freq = ..."? */
 static int es_clave_nuestra(const char *l, const char *fin)
 {
     while (l < fin && isspace((unsigned char)*l)) l++;
@@ -95,7 +95,7 @@ static int es_marca(const char *l, const char *fin)
     return (size_t)(fin - l) >= strlen(HW_MARCA) && strncmp(l, HW_MARCA, strlen(HW_MARCA)) == 0;
 }
 
-/* Si la línea es una cabecera [x], copia x en sec y devuelve 1. */
+/* If the line is a [x] header, copies x into sec and returns 1. */
 static int cabecera(const char *l, const char *fin, char *sec, size_t n)
 {
     while (l < fin && isspace((unsigned char)*l)) l++;
@@ -109,7 +109,7 @@ static int cabecera(const char *l, const char *fin, char *sec, size_t n)
     return 1;
 }
 
-/* Llama a cb por cada línea (con su '\n') indicando la sección en la que está. */
+/* Calls cb for every line (with its '\n') and the section it is in. */
 typedef void (*por_linea)(const char *sec, int es_cab, const char *l, const char *fin, void *d);
 static void recorrer(const char *texto, por_linea cb, void *d)
 {
@@ -148,7 +148,7 @@ static void editar_linea(const char *sec, int es_cab, const char *l, const char 
     Edicion *e = d;
     int nuestra = strcmp(sec, e->seccion) == 0;
     if (nuestra && !es_cab && (es_clave_nuestra(l, fin) || es_marca(l, fin)))
-        return;                                   /* se reemplaza */
+        return;                                   /* replaced */
     anexar(e, l, (size_t)(fin - l));
     if (nuestra && es_cab) {
         if (fin > l && fin[-1] != '\n') anexar(e, "\n", 1);
@@ -168,7 +168,7 @@ static void extraer_linea(const char *sec, int es_cab, const char *l, const char
     }
 }
 
-/* marca == NULL: "auto" (restaurar valores originales de la sección). */
+/* marca == NULL: "auto" (restore the section's original values). */
 static int configurar_auto_cpufreq(const char *seccion, const char *marca,
                                    const char *turbo, long khz)
 {
@@ -178,7 +178,7 @@ static int configurar_auto_cpufreq(const char *seccion, const char *marca,
         return -1;
     }
 
-    /* Copia del original, solo la primera vez (vacía si no había configuración) */
+    /* Copy of the original, only the first time (empty if there was no config) */
     if (access(RESPALDO, F_OK) != 0 && guardar(RESPALDO, actual, 1) != 0) {
         fprintf(stderr, "cpu-freq helper: cannot create %s: %s\n", RESPALDO, strerror(errno));
         free(actual);
@@ -215,7 +215,7 @@ static int configurar_auto_cpufreq(const char *seccion, const char *marca,
     int r = 0;
     if (strcmp(e.salida, actual) != 0) {
         unlink(CONF_TMP);
-        /* rename atómico: auto-cpufreq lo ve como IN_MOVED_TO y recarga */
+        /* atomic rename: auto-cpufreq sees IN_MOVED_TO and reloads */
         if (guardar(CONF_TMP, e.salida, 1) != 0 || rename(CONF_TMP, CONF) != 0) {
             fprintf(stderr, "cpu-freq helper: cannot save %s: %s\n", CONF, strerror(errno));
             unlink(CONF_TMP);
@@ -237,7 +237,7 @@ static int escribir_turbo(int turbo)
     return escribir(rt, valor) != 0;
 }
 
-/* khz <= 0: máximo del hardware en cada política. turbo < 0: no tocarlo. */
+/* khz <= 0: the hardware max of each policy. turbo < 0: leave it alone. */
 static int escribir_sysfs(long khz, int turbo)
 {
     glob_t g;
@@ -245,7 +245,7 @@ static int escribir_sysfs(long khz, int turbo)
         fprintf(stderr, "cpu-freq helper: cpufreq not found\n");
         return 1;
     }
-    /* Encender el turbo primero: en Intel sube cpuinfo_max_freq y el máximo se lee después */
+    /* Turn turbo on first: on Intel that raises cpuinfo_max_freq, which is read afterwards */
     int fallos = turbo == 1 ? escribir_turbo(1) : 0;
     for (size_t i = 0; i < g.gl_pathc; i++) {
         char ruta[PATH_MAX], valor[24];
@@ -293,7 +293,7 @@ int main(int argc, char **argv)
         }
     }
 
-#ifndef PRUEBA   /* solo la compilación de pruebas (HW_RAIZ apunta a un árbol falso) omite esto */
+#ifndef PRUEBA   /* only the test build (HW_RAIZ points at a fake tree) skips this */
     if (geteuid() != 0) {
         fprintf(stderr, "cpu-freq helper: must run as root (use pkexec)\n");
         return 3;
@@ -313,7 +313,7 @@ int main(int argc, char **argv)
             fallos++;
     }
 
-    /* Efecto inmediato. En "auto" con auto-cpufreq, él decide en su siguiente ciclo. */
+    /* Immediate effect. For "auto" with auto-cpufreq, it decides on its next cycle. */
     if (!es_auto)
         fallos += escribir_sysfs(khz, es_turbo);
     else if (!con_acf)

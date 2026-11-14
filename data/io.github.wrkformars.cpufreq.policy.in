@@ -16,6 +16,6 @@
       <allow_inactive>no</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
-    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/cpu-freq/ayudante</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">@AYUDANTE@</annotate>
   </action>
 </policyconfig>

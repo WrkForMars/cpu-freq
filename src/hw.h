@@ -1,12 +1,12 @@
 /*
- * hw.h: detección del hardware compartida por la app y el ayudante.
- * Solo usa libc, para que el ayudante (root) no dependa de GLib.
+ * hw.h: hardware detection shared by the app, the helper and the panel plugin.
+ * Only uses libc, so the root helper does not depend on GLib.
  *
- *  - Políticas de cpufreq y frecuencias: lista (acpi-cpufreq) o rango continuo
+ *  - cpufreq policies and frequencies: a list (acpi-cpufreq) or a continuous range
  *    (amd-pstate, intel_pstate).
- *  - Turbo: cpufreq/boost (AMD y acpi) o intel_pstate/no_turbo (invertido).
- *  - Cargador: misma regla que auto-cpufreq, para elegir [charger] o [battery].
- *  - auto-cpufreq: si está instalado y dónde está su configuración.
+ *  - Turbo: cpufreq/boost (AMD and acpi) or intel_pstate/no_turbo (inverted).
+ *  - Charger: same rule as auto-cpufreq, to pick [charger] or [battery].
+ *  - auto-cpufreq: whether it is installed and where its configuration is.
  */
 #ifndef CPUFREQ_HW_H
 #define CPUFREQ_HW_H
@@ -24,7 +24,7 @@
 #define HW_MAX_FREC  32
 #define HW_MAX_NIVEL 4
 
-/* Raíz de todas las rutas del sistema: vacía de verdad; las pruebas la apuntan a un árbol falso */
+/* Root of every system path: empty for real; the tests point it at a fake tree */
 #ifndef HW_RAIZ
 #define HW_RAIZ ""
 #endif
@@ -33,10 +33,10 @@
 
 typedef struct {
     long min, max;                 /* cpuinfo_min_freq / cpuinfo_max_freq (kHz) */
-    long nominal;                  /* tope sin turbo: base_frequency (Intel) o
-                                      amd_pstate_nominal_freq (AMD); 0 si no se sabe */
-    long disp[HW_MAX_FREC];        /* scaling_available_frequencies, ascendente */
-    int  ndisp;                    /* 0: rango continuo */
+    long nominal;                  /* top without turbo: base_frequency (Intel) or
+                                      amd_pstate_nominal_freq (AMD); 0 if unknown */
+    long disp[HW_MAX_FREC];        /* scaling_available_frequencies, ascending */
+    int  ndisp;                    /* 0: continuous range */
     char driver[32];
 } HwFrec;
 
@@ -58,7 +58,7 @@ static inline int hw_leer_long(const char *ruta, long *v)
     return fin != b;
 }
 
-/* Directorios de política (policyN, o cpuN/cpufreq en kernels viejos). */
+/* Policy directories (policyN, or cpuN/cpufreq on old kernels). */
 static inline int hw_politicas(glob_t *g)
 {
     if (glob(HW_RAIZ "/sys/devices/system/cpu/cpufreq/policy[0-9]*", GLOB_ONLYDIR, NULL, g) == 0 && g->gl_pathc)
@@ -108,7 +108,7 @@ static inline int hw_frecuencias(HwFrec *h)
     return h->max > 0;
 }
 
-/* ¿Puede usarse khz como límite máximo? (lista de la que admite el hardware) */
+/* Can khz be used as the max limit? (from what the hardware supports) */
 static inline int hw_valida_khz(const HwFrec *h, long khz)
 {
     if (h->ndisp) {
@@ -119,9 +119,9 @@ static inline int hw_valida_khz(const HwFrec *h, long khz)
 }
 
 /*
- * Niveles de límite que ofrece la app (ascendentes, sin contar Auto ni Turbo).
- * Lista: todos si son ≤ 4; si son más, mínimo, dos intermedios y máximo.
- * Rango: mínimo, punto medio redondeado a 100 MHz y tope sin turbo (nominal o máximo).
+ * Limit levels offered by the app (ascending, not counting Auto or Turbo).
+ * List: all of them if ≤ 4; otherwise min, two in between and max.
+ * Range: min, midpoint rounded to 100 MHz and the top without turbo (nominal or max).
  */
 static inline int hw_niveles(const HwFrec *h, long *out)
 {
@@ -142,7 +142,7 @@ static inline int hw_niveles(const HwFrec *h, long *out)
     return n;
 }
 
-/* Archivo de turbo: devuelve la ruta (o NULL) y si el valor va invertido. */
+/* Turbo file: returns its path (or NULL) and whether the value is inverted. */
 static inline const char *hw_ruta_turbo(int *inverso)
 {
     if (access(HW_RAIZ "/sys/devices/system/cpu/intel_pstate/no_turbo", F_OK) == 0) {
@@ -155,7 +155,7 @@ static inline const char *hw_ruta_turbo(int *inverso)
     return NULL;
 }
 
-/* 1 encendido, 0 apagado, -1 no hay control de turbo. */
+/* 1 on, 0 off, -1 no turbo control. */
 static inline int hw_turbo(void)
 {
     int inv;
@@ -174,10 +174,10 @@ static inline int hw_valor_turbo(int encendido, char *b, size_t n)
 }
 
 /*
- * Misma regla que auto-cpufreq (SystemInfo.external_power_state):
- * sin batería del sistema → cargador; si hay fuentes externas con online,
- * cargador si alguna está en línea; si no, según el estado de la batería.
- * Devuelve también si hay batería y si hay alguna fuente externa.
+ * Same rule as auto-cpufreq (SystemInfo.external_power_state):
+ * no system battery → charger; if there are external supplies with "online",
+ * charger if any is online; otherwise, from the battery status.
+ * Also reports whether there is a battery and any external supply.
  */
 static inline int hw_cargador(int *hay_bateria, int *hay_externa)
 {
@@ -217,7 +217,7 @@ static inline int hw_cargador(int *hay_bateria, int *hay_externa)
     return strcasecmp(estado, "discharging") != 0;
 }
 
-/* ¿Está auto-cpufreq instalado? (paquete, script oficial o snap) */
+/* Is auto-cpufreq installed? (package, official installer or snap) */
 static inline int hw_hay_auto_cpufreq(void)
 {
     static const char *rutas[] = {
@@ -230,8 +230,8 @@ static inline int hw_hay_auto_cpufreq(void)
 }
 
 /*
- * Marca "# cpu-freq: X" de la sección [charger] o [battery] de auto-cpufreq.
- * Devuelve 1 y copia X (p. ej. "1400000" o "turbo") si existe; 0 si no (= Auto).
+ * "# cpu-freq: X" marker in auto-cpufreq's [charger] or [battery] section.
+ * Returns 1 and copies X (e.g. "1400000" or "turbo") if present; 0 otherwise (= Auto).
  */
 static inline int hw_marca(int cargador, char *out, size_t n)
 {
