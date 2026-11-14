@@ -816,10 +816,40 @@ static void bandeja_clic(GtkStatusIcon *i, gpointer d)
     alternar();
 }
 
+static void aplicar(int pos);
+
+static void menu_posicion(GtkCheckMenuItem *it, gpointer d)
+{
+    if (gtk_check_menu_item_get_active(it)) aplicar(GPOINTER_TO_INT(d));
+}
+
+/* Clic derecho: elegir el límite sin abrir la ventana, abrir o salir. */
 static void bandeja_menu(GtkStatusIcon *i, guint boton, guint tiempo, gpointer d)
 {
     (void)d;
+    /* La ventana puede estar oculta: releer qué está elegido ahora */
+    leer_energia(&app.l);
+    leer_eleccion(&app.l);
+    app.real = -1;
+    for (int k = 1; k < NPOS; k++) if (coincide(k, &app.l)) app.real = k;
+    int marcado = app.con_acf ? app.elegido : app.real;
+
     GtkWidget *m = gtk_menu_new();
+    GtkWidget *tit = gtk_menu_item_new_with_label(_("Speed limit"));
+    gtk_widget_set_sensitive(tit, FALSE);
+    gtk_menu_shell_append(GTK_MENU_SHELL(m), tit);
+    GSList *grupo = NULL;
+    for (int k = 0; k < NPOS; k++) {
+        GtkWidget *it = gtk_radio_menu_item_new_with_label(grupo, k == turbo_pos ? POS[k].nombre : POS[k].etiqueta);
+        grupo = gtk_radio_menu_item_get_group(GTK_RADIO_MENU_ITEM(it));
+        gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(it), k == marcado);
+        gtk_widget_set_sensitive(it, !app.aplicando);
+        gtk_widget_set_tooltip_text(it, POS[k].ayuda);
+        g_signal_connect(it, "toggled", G_CALLBACK(menu_posicion), GINT_TO_POINTER(k));
+        gtk_menu_shell_append(GTK_MENU_SHELL(m), it);
+    }
+    gtk_menu_shell_append(GTK_MENU_SHELL(m), gtk_separator_menu_item_new());
+    g_signal_connect(m, "selection-done", G_CALLBACK(gtk_widget_destroy), NULL);
     GtkWidget *abrir = gtk_menu_item_new_with_label(_("Open"));
     GtkWidget *salir = gtk_menu_item_new_with_label(_("Quit"));
     g_signal_connect_swapped(abrir, "activate", G_CALLBACK(mostrar_ventana), NULL);
@@ -906,6 +936,8 @@ static void trazo(cairo_t *cr, double W, double H, const float *v, double min, d
     }
 }
 
+static void hist_resumen(double *ghz, double *temp, double *pico);
+
 static gboolean dibujar_grafica(GtkWidget *w, cairo_t *cr, gpointer d)
 {
     (void)d;
@@ -934,6 +966,18 @@ static gboolean dibujar_grafica(GtkWidget *w, cairo_t *cr, gpointer d)
     rgba(cr, p->acento, 1);
     cairo_stroke(cr);
 
+    /* promedio de frecuencia: línea discontinua */
+    double g, t, pico;
+    hist_resumen(&g, &t, &pico);
+    double ym = floor(H - CLAMP(g / app.escala, 0, 1) * H) + 0.5, guion[] = { 4, 3 };
+    cairo_set_dash(cr, guion, 2, 0);
+    cairo_set_line_width(cr, 1);
+    cairo_move_to(cr, 0, ym);
+    cairo_line_to(cr, W, ym);
+    rgba(cr, p->acento_texto, 0.8);
+    cairo_stroke(cr);
+    cairo_set_dash(cr, NULL, 0, 0);
+
     /* temperatura (20–100 °C), solo si hay sensor */
     if (app.l.temp >= 0) {
         cairo_set_line_width(cr, 1.5);
@@ -944,14 +988,32 @@ static gboolean dibujar_grafica(GtkWidget *w, cairo_t *cr, gpointer d)
     return FALSE;
 }
 
+/* Promedio de frecuencia y promedio/máximo de temperatura de lo que hay en el historial */
+static void hist_resumen(double *ghz, double *temp, double *pico)
+{
+    double sg = 0, st = 0;
+    int nt = 0;
+    *pico = -1;
+    for (int i = 0; i < hist.n; i++) {
+        int k = hist_idx(i);
+        sg += hist.ghz[k];
+        if (hist.temp[k] >= 0) { st += hist.temp[k]; nt++; if (hist.temp[k] > *pico) *pico = hist.temp[k]; }
+    }
+    *ghz = hist.n ? sg / hist.n : 0;
+    *temp = nt ? st / nt : -1;
+}
+
+/* La leyenda resume la ventana (promedios y pico); el valor actual ya está arriba. */
 static void actualizar_grafica(void)
 {
     if (!app.grafica) return;
-    char b[48];
-    snprintf(b, sizeof b, "● %.2f GHz", app.l.ghz);
+    double g, t, pico;
+    hist_resumen(&g, &t, &pico);
+    char b[64];
+    snprintf(b, sizeof b, _("avg %.2f GHz"), g);
     gtk_label_set_text(GTK_LABEL(app.ley_ghz), b);
-    if (app.l.temp >= 0) snprintf(b, sizeof b, "● %d °C", app.l.temp);
-    gtk_label_set_text(GTK_LABEL(app.ley_temp), app.l.temp >= 0 ? b : "");
+    if (t >= 0) snprintf(b, sizeof b, _("avg %.0f °C · peak %.0f"), t, pico);
+    gtk_label_set_text(GTK_LABEL(app.ley_temp), t >= 0 ? b : "");
     gtk_widget_queue_draw(app.grafica);
 }
 
@@ -1174,11 +1236,10 @@ static void ayudante_termino(GPid pid, gint estado, gpointer d)
     refrescar(NULL);
 }
 
-static void al_pulsar(GtkToggleButton *b, gpointer d)
+/* Aplica la posición pos con el ayudante (botones y menú de la bandeja). */
+static void aplicar(int pos)
 {
-    (void)b;
-    if (app.actualizando || app.aplicando) return;
-    int pos = GPOINTER_TO_INT(d);
+    if (app.aplicando || pos < 0 || pos >= NPOS) return;
 
     if (!g_file_test(AYUDANTE, G_FILE_TEST_IS_EXECUTABLE)) {
         g_strlcpy(app.error, _("The helper is missing: install the cpu-freq package."), sizeof app.error);
@@ -1202,6 +1263,13 @@ static void al_pulsar(GtkToggleButton *b, gpointer d)
     }
     actualizar_botones();
     actualizar_aviso();
+}
+
+static void al_pulsar(GtkToggleButton *b, gpointer d)
+{
+    (void)b;
+    if (app.actualizando) return;
+    aplicar(GPOINTER_TO_INT(d));
 }
 
 /* --------------------------------------------------------------- Ventana */
@@ -1320,6 +1388,23 @@ static GtkWidget *crear_ajustes(void)
     return b;
 }
 
+/*
+ * Pantallas bajas (área útil < 980 px, p. ej. 1366×768): dos columnas, ~560 px de alto.
+ * CPU_FREQ_COMPACTO=1/0 lo fuerza (para probar).
+ */
+static gboolean es_compacto(void)
+{
+    const char *e = g_getenv("CPU_FREQ_COMPACTO");
+    if (e) return e[0] == '1';
+    GdkDisplay *d = gdk_display_get_default();
+    GdkMonitor *m = d ? gdk_display_get_primary_monitor(d) : NULL;
+    if (!m && d) m = gdk_display_get_monitor(d, 0);
+    if (!m) return FALSE;
+    GdkRectangle r;
+    gdk_monitor_get_workarea(m, &r);
+    return r.height < 980;
+}
+
 static void construir_contenido(void)
 {
     if (app.contenido) gtk_widget_destroy(app.contenido);
@@ -1328,9 +1413,23 @@ static void construir_contenido(void)
     crear_posiciones();
     gtk_window_set_title(GTK_WINDOW(app.ventana), _("CPU Speed"));
 
-    GtkWidget *caja = app.contenido = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-    g_object_set(caja, "margin", 24, "margin-top", 12, NULL);
-    gtk_container_add(GTK_CONTAINER(app.ventana), caja);
+    /* caja: velocímetro e historial; der: límite y estado. En pantallas altas son la misma */
+    gboolean compacto = es_compacto();
+    GtkWidget *raiz = app.contenido = gtk_box_new(compacto ? GTK_ORIENTATION_HORIZONTAL
+                                                           : GTK_ORIENTATION_VERTICAL, 32);
+    g_object_set(raiz, "margin", 24, "margin-top", 12, NULL);
+    gtk_container_add(GTK_CONTAINER(app.ventana), raiz);
+    GtkWidget *caja = raiz, *der = raiz;
+    if (compacto) {
+        caja = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+        der = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+        gtk_widget_set_size_request(caja, 392, -1);
+        gtk_widget_set_size_request(der, 392, -1);
+        gtk_box_pack_start(GTK_BOX(raiz), caja, FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(raiz), der, FALSE, FALSE, 0);
+    } else {
+        gtk_box_set_spacing(GTK_BOX(raiz), 0);
+    }
 
     gtk_box_pack_start(GTK_BOX(caja), crear_ajustes(), FALSE, FALSE, 0);
 
@@ -1359,16 +1458,16 @@ static void construir_contenido(void)
     gtk_box_pack_start(GTK_BOX(hist_caja), cab, FALSE, FALSE, 0);
     app.grafica = gtk_drawing_area_new();
     gtk_widget_set_size_request(app.grafica, -1, 72);
-    gtk_widget_set_tooltip_text(app.grafica, _("Blue: frequency (0 to the end of the dial). Amber: temperature (20–100 °C)."));
+    gtk_widget_set_tooltip_text(app.grafica, _("Blue: frequency (0 to the end of the dial); dashed line: its average. Amber: temperature (20–100 °C)."));
     g_signal_connect(app.grafica, "draw", G_CALLBACK(dibujar_grafica), NULL);
     gtk_box_pack_start(GTK_BOX(hist_caja), app.grafica, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(caja), hist_caja, FALSE, FALSE, 0);
 
     GtkWidget *t = app.titulo_lim = etiqueta("", "etiqueta");
     gtk_widget_set_tooltip_text(t, _("With auto-cpufreq, the choice is saved for the current power source (charger or battery) and survives a restart."));
-    gtk_widget_set_margin_top(t, 24);
+    gtk_widget_set_margin_top(t, compacto ? 44 : 24);   /* compacto: alineado con el dial */
     gtk_widget_set_margin_bottom(t, 8);
-    gtk_box_pack_start(GTK_BOX(caja), t, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(der), t, FALSE, FALSE, 0);
 
     GtkWidget *pos = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     gtk_style_context_add_class(gtk_widget_get_style_context(pos), "posiciones");
@@ -1378,20 +1477,20 @@ static void construir_contenido(void)
         g_signal_connect(b, "toggled", G_CALLBACK(al_pulsar), GINT_TO_POINTER(i));
         gtk_box_pack_start(GTK_BOX(pos), b, TRUE, TRUE, 0);
     }
-    gtk_box_pack_start(GTK_BOX(caja), pos, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(der), pos, FALSE, FALSE, 0);
 
     app.aviso = etiqueta(" ", "aviso");
     gtk_label_set_ellipsize(GTK_LABEL(app.aviso), PANGO_ELLIPSIZE_END);
     gtk_widget_set_margin_top(app.aviso, 8);
     gtk_widget_set_size_request(app.aviso, -1, 16);
-    gtk_box_pack_start(GTK_BOX(caja), app.aviso, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(der), app.aviso, FALSE, FALSE, 0);
 
     gchar *est = g_utf8_strup(_("System status"), -1);
     t = etiqueta(est, "etiqueta");
     g_free(est);
     gtk_widget_set_margin_top(t, 16);
     gtk_widget_set_margin_bottom(t, 8);
-    gtk_box_pack_start(GTK_BOX(caja), t, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(der), t, FALSE, FALSE, 0);
 
     GtkWidget *tarjeta = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_style_context_add_class(gtk_widget_get_style_context(tarjeta), "tarjeta");
@@ -1421,8 +1520,8 @@ static void construir_contenido(void)
         gtk_widget_show(f);
         gtk_box_pack_start(GTK_BOX(tarjeta), f, FALSE, FALSE, 0);
     }
-    gtk_box_pack_start(GTK_BOX(caja), tarjeta, FALSE, FALSE, 0);
-    gtk_widget_show_all(caja);
+    gtk_box_pack_start(GTK_BOX(der), tarjeta, FALSE, FALSE, 0);
+    gtk_widget_show_all(raiz);
     for (int i = 0; i < N_FILAS; i++) gtk_widget_hide(app.chip[i]);
 }
 

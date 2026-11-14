@@ -23,17 +23,15 @@
 #include <sys/stat.h>
 #include "hw.h"
 
-#ifndef PRUEBA_DIR
-#define PRUEBA_DIR "/etc"   /* solo `make prueba` lo cambia, para probar sin root */
-#endif
-#define CONF       PRUEBA_DIR "/auto-cpufreq.conf"
-#define CONF_TMP   PRUEBA_DIR "/.auto-cpufreq.conf.cpu-freq"
-#define RESPALDO   PRUEBA_DIR "/auto-cpufreq.conf.cpu-freq-orig"
+#define CONF       HW_CONF_ACF
+#define CONF_TMP   HW_RAIZ "/etc/.auto-cpufreq.conf.cpu-freq"
+#define RESPALDO   HW_RAIZ "/etc/auto-cpufreq.conf.cpu-freq-orig"
 #define MAX_CONF   (64 * 1024)
 
 static int escribir(const char *ruta, const char *valor)
 {
-    int fd = open(ruta, O_WRONLY | O_NOFOLLOW | O_CLOEXEC);
+    /* O_TRUNC no afecta a sysfs y deja limpios los archivos falsos de las pruebas */
+    int fd = open(ruta, O_WRONLY | O_TRUNC | O_NOFOLLOW | O_CLOEXEC);
     if (fd < 0) {
         fprintf(stderr, "cpu-freq helper: cannot open %s: %s\n", ruta, strerror(errno));
         return -1;
@@ -295,7 +293,7 @@ int main(int argc, char **argv)
         }
     }
 
-#ifndef PRUEBA
+#ifndef PRUEBA   /* solo la compilación de pruebas (HW_RAIZ apunta a un árbol falso) omite esto */
     if (geteuid() != 0) {
         fprintf(stderr, "cpu-freq helper: must run as root (use pkexec)\n");
         return 3;
@@ -315,15 +313,11 @@ int main(int argc, char **argv)
             fallos++;
     }
 
-#ifdef PRUEBA
-    (void)escribir_sysfs;   /* la prueba no toca sysfs */
-#else
     /* Efecto inmediato. En "auto" con auto-cpufreq, él decide en su siguiente ciclo. */
     if (!es_auto)
         fallos += escribir_sysfs(khz, es_turbo);
     else if (!con_acf)
         fallos += escribir_sysfs(0, 1);
-#endif
 
     return fallos ? 1 : 0;
 }

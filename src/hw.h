@@ -24,7 +24,11 @@
 #define HW_MAX_FREC  32
 #define HW_MAX_NIVEL 4
 
-#define HW_CONF_ACF  "/etc/auto-cpufreq.conf"
+/* Raíz de todas las rutas del sistema: vacía de verdad; las pruebas la apuntan a un árbol falso */
+#ifndef HW_RAIZ
+#define HW_RAIZ ""
+#endif
+#define HW_CONF_ACF  HW_RAIZ "/etc/auto-cpufreq.conf"
 #define HW_MARCA     "# cpu-freq:"
 
 typedef struct {
@@ -57,10 +61,10 @@ static inline int hw_leer_long(const char *ruta, long *v)
 /* Directorios de política (policyN, o cpuN/cpufreq en kernels viejos). */
 static inline int hw_politicas(glob_t *g)
 {
-    if (glob("/sys/devices/system/cpu/cpufreq/policy[0-9]*", GLOB_ONLYDIR, NULL, g) == 0 && g->gl_pathc)
+    if (glob(HW_RAIZ "/sys/devices/system/cpu/cpufreq/policy[0-9]*", GLOB_ONLYDIR, NULL, g) == 0 && g->gl_pathc)
         return 1;
     globfree(g);
-    return glob("/sys/devices/system/cpu/cpu[0-9]*/cpufreq", GLOB_ONLYDIR, NULL, g) == 0 && g->gl_pathc;
+    return glob(HW_RAIZ "/sys/devices/system/cpu/cpu[0-9]*/cpufreq", GLOB_ONLYDIR, NULL, g) == 0 && g->gl_pathc;
 }
 
 static int hw_cmp_long(const void *a, const void *b)
@@ -141,13 +145,13 @@ static inline int hw_niveles(const HwFrec *h, long *out)
 /* Archivo de turbo: devuelve la ruta (o NULL) y si el valor va invertido. */
 static inline const char *hw_ruta_turbo(int *inverso)
 {
-    if (access("/sys/devices/system/cpu/intel_pstate/no_turbo", F_OK) == 0) {
+    if (access(HW_RAIZ "/sys/devices/system/cpu/intel_pstate/no_turbo", F_OK) == 0) {
         *inverso = 1;
-        return "/sys/devices/system/cpu/intel_pstate/no_turbo";
+        return HW_RAIZ "/sys/devices/system/cpu/intel_pstate/no_turbo";
     }
     *inverso = 0;
-    if (access("/sys/devices/system/cpu/cpufreq/boost", F_OK) == 0)
-        return "/sys/devices/system/cpu/cpufreq/boost";
+    if (access(HW_RAIZ "/sys/devices/system/cpu/cpufreq/boost", F_OK) == 0)
+        return HW_RAIZ "/sys/devices/system/cpu/cpufreq/boost";
     return NULL;
 }
 
@@ -177,7 +181,7 @@ static inline int hw_valor_turbo(int encendido, char *b, size_t n)
  */
 static inline int hw_cargador(int *hay_bateria, int *hay_externa)
 {
-    DIR *d = opendir("/sys/class/power_supply");
+    DIR *d = opendir(HW_RAIZ "/sys/class/power_supply");
     int bateria = 0, externas = 0, en_linea = 0;
     char estado[32] = "";
     if (d) {
@@ -185,20 +189,20 @@ static inline int hw_cargador(int *hay_bateria, int *hay_externa)
         while ((e = readdir(d))) {
             if (e->d_name[0] == '.' || strstr(e->d_name, "hidpp_battery")) continue;
             char ruta[PATH_MAX], tipo[32] = "", alcance[32] = "", v[8];
-            snprintf(ruta, sizeof ruta, "/sys/class/power_supply/%s/type", e->d_name);
+            snprintf(ruta, sizeof ruta, HW_RAIZ "/sys/class/power_supply/%s/type", e->d_name);
             if (!hw_leer_linea(ruta, tipo, sizeof tipo)) continue;
-            snprintf(ruta, sizeof ruta, "/sys/class/power_supply/%s/scope", e->d_name);
+            snprintf(ruta, sizeof ruta, HW_RAIZ "/sys/class/power_supply/%s/scope", e->d_name);
             hw_leer_linea(ruta, alcance, sizeof alcance);
             if (!strcasecmp(alcance, "device")) continue;
             if (!strcasecmp(tipo, "battery")) {
                 if (!bateria) {
-                    snprintf(ruta, sizeof ruta, "/sys/class/power_supply/%s/status", e->d_name);
+                    snprintf(ruta, sizeof ruta, HW_RAIZ "/sys/class/power_supply/%s/status", e->d_name);
                     hw_leer_linea(ruta, estado, sizeof estado);
                 }
                 bateria = 1;
                 continue;
             }
-            snprintf(ruta, sizeof ruta, "/sys/class/power_supply/%s/online", e->d_name);
+            snprintf(ruta, sizeof ruta, HW_RAIZ "/sys/class/power_supply/%s/online", e->d_name);
             if (hw_leer_linea(ruta, v, sizeof v) && (v[0] == '0' || v[0] == '1' || v[0] == '2')) {
                 externas++;
                 if (v[0] != '0') en_linea = 1;
@@ -217,12 +221,41 @@ static inline int hw_cargador(int *hay_bateria, int *hay_externa)
 static inline int hw_hay_auto_cpufreq(void)
 {
     static const char *rutas[] = {
-        HW_CONF_ACF, "/opt/auto-cpufreq", "/usr/local/bin/auto-cpufreq",
-        "/usr/bin/auto-cpufreq", "/snap/bin/auto-cpufreq",
+        HW_CONF_ACF, HW_RAIZ "/opt/auto-cpufreq", HW_RAIZ "/usr/local/bin/auto-cpufreq",
+        HW_RAIZ "/usr/bin/auto-cpufreq", HW_RAIZ "/snap/bin/auto-cpufreq",
     };
     for (size_t i = 0; i < sizeof rutas / sizeof rutas[0]; i++)
         if (access(rutas[i], F_OK) == 0) return 1;
     return 0;
+}
+
+/*
+ * Marca "# cpu-freq: X" de la sección [charger] o [battery] de auto-cpufreq.
+ * Devuelve 1 y copia X (p. ej. "1400000" o "turbo") si existe; 0 si no (= Auto).
+ */
+static inline int hw_marca(int cargador, char *out, size_t n)
+{
+    FILE *f = fopen(HW_CONF_ACF, "re");
+    if (!f) return 0;
+    const char *buscada = cargador ? "charger" : "battery";
+    char linea[256], sec[64] = "";
+    int hay = 0;
+    while (fgets(linea, sizeof linea, f)) {
+        char *p = linea;
+        while (isspace((unsigned char)*p)) p++;
+        if (*p == '[') {
+            char *c = strchr(p, ']');
+            if (c) { *c = '\0'; snprintf(sec, sizeof sec, "%s", p + 1); }
+        } else if (!strcmp(sec, buscada) && !strncmp(p, HW_MARCA, strlen(HW_MARCA))) {
+            p += strlen(HW_MARCA);
+            while (isspace((unsigned char)*p)) p++;
+            p[strcspn(p, " \t\r\n")] = '\0';
+            snprintf(out, n, "%s", p);
+            hay = 1;
+        }
+    }
+    fclose(f);
+    return hay;
 }
 
 #endif

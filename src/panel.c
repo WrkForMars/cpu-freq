@@ -1,7 +1,8 @@
 /*
  * Complemento del panel de XFCE: mini velocímetro con la frecuencia del CPU.
- * Corre dentro del panel (sin proceso aparte), lee cada 2 s y al hacer clic abre
- * la app cpu-freq. Comparte la detección de hardware con la app (hw.h).
+ * Corre dentro del panel (sin proceso aparte), lee cada 2 s; el clic abre o cierra la
+ * app cpu-freq y el menú del clic derecho elige el límite (Auto, niveles, Turbo) llamando
+ * al mismo ayudante con pkexec. Comparte la detección de hardware con la app (hw.h).
  */
 #define _GNU_SOURCE
 #include <libxfce4panel/libxfce4panel.h>
@@ -15,7 +16,11 @@
 #define DOMINIO "cpu-freq"
 #define _(s) dgettext(DOMINIO, s)
 
+#ifndef AYUDANTE
+#define AYUDANTE "/usr/libexec/cpu-freq/ayudante"
+#endif
 #define REFRESCO_MS 2000
+#define MAX_POS (HW_MAX_NIVEL + 2)
 #define A0 (0.75 * G_PI)
 #define BARRIDO (1.5 * G_PI)
 
@@ -25,6 +30,13 @@ typedef struct {
     guint timer;
     double ghz, escala;
     int turbo;
+    /* menú de límites: 0 = Auto, luego niveles, al final Turbo si hay */
+    GtkWidget *items[MAX_POS];
+    char args[MAX_POS][16];
+    long khz[MAX_POS];
+    int npos, turbo_pos;
+    long tope_sin_turbo;
+    gboolean actualizando, aplicando;
 } Panel;
 
 static double leer_ghz(void)
@@ -78,6 +90,115 @@ static gboolean dibujar(GtkWidget *w, cairo_t *cr, gpointer d)
     return FALSE;
 }
 
+/* Posición elegida: la marca de auto-cpufreq o, sin él, la que coincide con el sistema. */
+static int posicion_actual(const Panel *p)
+{
+    if (hw_hay_auto_cpufreq()) {
+        char m[16];
+        if (!hw_marca(hw_cargador(NULL, NULL), m, sizeof m)) return 0;
+        if (strchr(m, '.')) snprintf(m, sizeof m, "%ld", lround(g_ascii_strtod(m, NULL) * 1e6));
+        for (int i = 1; i < p->npos; i++) if (!strcmp(m, p->args[i])) return i;
+        return 0;
+    }
+    glob_t g;
+    long max = -1;
+    if (hw_politicas(&g)) {
+        char ruta[PATH_MAX];
+        snprintf(ruta, sizeof ruta, "%s/scaling_max_freq", g.gl_pathv[0]);
+        hw_leer_long(ruta, &max);
+        globfree(&g);
+    }
+    int t = hw_turbo();
+    if (p->turbo_pos >= 0 && t == 1 && max >= p->tope_sin_turbo) return p->turbo_pos;
+    for (int i = 1; i < p->npos; i++)
+        if (i != p->turbo_pos && max == p->khz[i] && t != 1) return i;
+    return -1;
+}
+
+static void marcar_menu(Panel *p)
+{
+    int actual = posicion_actual(p);
+    p->actualizando = TRUE;
+    for (int i = 0; i < p->npos; i++) {
+        gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(p->items[i]), i == actual);
+        gtk_widget_set_sensitive(p->items[i], !p->aplicando);
+    }
+    p->actualizando = FALSE;
+}
+
+static void ayudante_termino(GPid pid, gint estado, gpointer d)
+{
+    Panel *p = d;
+    (void)estado;
+    g_spawn_close_pid(pid);
+    p->aplicando = FALSE;
+    marcar_menu(p);
+}
+
+static void al_elegir(GtkCheckMenuItem *it, gpointer d)
+{
+    Panel *p = d;
+    if (p->actualizando || p->aplicando || !gtk_check_menu_item_get_active(it)) return;
+    int i = 0;
+    while (i < p->npos && p->items[i] != GTK_WIDGET(it)) i++;
+    if (i == p->npos) return;
+    gchar *argv[] = { "pkexec", AYUDANTE, p->args[i], NULL };
+    GPid pid;
+    if (g_spawn_async(NULL, argv, NULL, G_SPAWN_SEARCH_PATH | G_SPAWN_DO_NOT_REAP_CHILD |
+                      G_SPAWN_STDOUT_TO_DEV_NULL | G_SPAWN_STDERR_TO_DEV_NULL, NULL, NULL, &pid, NULL)) {
+        p->aplicando = TRUE;
+        g_child_watch_add(pid, ayudante_termino, p);
+    }
+    marcar_menu(p);
+}
+
+/* Añade "Speed limit", Auto, los niveles y Turbo al principio del menú del panel. */
+static void crear_menu(Panel *p)
+{
+    HwFrec h;
+    long niveles[HW_MAX_NIVEL];
+    int n = hw_frecuencias(&h) ? hw_niveles(&h, niveles) : 0;
+    int turbo = hw_turbo() >= 0;
+    char etiquetas[MAX_POS][32];
+
+    p->npos = 0;
+    p->turbo_pos = -1;
+    snprintf(p->args[0], sizeof p->args[0], "auto");
+    snprintf(etiquetas[0], sizeof etiquetas[0], "%s", _("Auto"));
+    p->npos = 1;
+    for (int i = 0; i < n; i++, p->npos++) {
+        snprintf(p->args[p->npos], sizeof p->args[0], "%ld", niveles[i]);
+        snprintf(etiquetas[p->npos], sizeof etiquetas[0], "%.1f GHz", niveles[i] / 1e6);
+        p->khz[p->npos] = niveles[i];
+    }
+    p->tope_sin_turbo = n ? niveles[n - 1] : h.max;
+    if (turbo && n) {
+        p->turbo_pos = p->npos;
+        snprintf(p->args[p->npos], sizeof p->args[0], "turbo");
+        snprintf(etiquetas[p->npos], sizeof etiquetas[0], _("%s + turbo"), etiquetas[n]);
+        p->npos++;
+    }
+
+    /* xfce_panel_plugin_menu_insert_item añade arriba: se insertan en orden inverso */
+    GtkWidget *sep = gtk_separator_menu_item_new();
+    gtk_widget_show(sep);
+    xfce_panel_plugin_menu_insert_item(p->plugin, GTK_MENU_ITEM(sep));
+    GSList *grupo = NULL;
+    for (int i = 0; i < p->npos; i++) {
+        p->items[i] = gtk_radio_menu_item_new_with_label(grupo, etiquetas[i]);
+        grupo = gtk_radio_menu_item_get_group(GTK_RADIO_MENU_ITEM(p->items[i]));
+        g_signal_connect(p->items[i], "toggled", G_CALLBACK(al_elegir), p);
+        gtk_widget_show(p->items[i]);
+    }
+    for (int i = p->npos - 1; i >= 0; i--)
+        xfce_panel_plugin_menu_insert_item(p->plugin, GTK_MENU_ITEM(p->items[i]));
+    GtkWidget *tit = gtk_menu_item_new_with_label(_("Speed limit"));
+    gtk_widget_set_sensitive(tit, FALSE);
+    gtk_widget_show(tit);
+    xfce_panel_plugin_menu_insert_item(p->plugin, GTK_MENU_ITEM(tit));
+    marcar_menu(p);
+}
+
 static gboolean refrescar(gpointer d)
 {
     Panel *p = d;
@@ -92,9 +213,10 @@ static gboolean refrescar(gpointer d)
     if (p->turbo >= 0)
         n += snprintf(tip + n, sizeof tip - (size_t)n, " · %s %s", _("Turbo"),
                       p->turbo ? _("Active") : _("Off"));
-    snprintf(tip + n, sizeof tip - (size_t)n, "\n%s", _("Click to open CPU Speed"));
+    snprintf(tip + n, sizeof tip - (size_t)n, "\n%s", _("Click to open or close CPU Speed. Right-click to set the speed limit."));
     gtk_widget_set_tooltip_text(p->boton, tip);
     gtk_widget_queue_draw(p->area);
+    if (!p->aplicando) marcar_menu(p);
     return G_SOURCE_CONTINUE;
 }
 
@@ -162,6 +284,7 @@ static void construir(XfcePanelPlugin *plugin)
 
     gtk_widget_show_all(p->boton);
     al_cambiar_modo(plugin, xfce_panel_plugin_get_mode(plugin), p);
+    crear_menu(p);
     refrescar(p);
     p->timer = g_timeout_add(REFRESCO_MS, refrescar, p);
 }

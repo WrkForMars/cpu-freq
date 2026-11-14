@@ -3,10 +3,10 @@
 #   make build    app, helper, translations and (with libxfce4panel-2.0-dev) the panel plugin
 #   make deb      build/cpu-freq_*.deb and, if built, build/cpu-freq-xfce_*.deb
 #   make pot      extracts the UI strings again into po/cpu-freq.pot
-#   make prueba   tests the helper without root on a copy of /etc/auto-cpufreq.conf
+#   make test     tests the root helper without root against fake sysfs/auto-cpufreq trees
 #   make clean
 PKG      := cpu-freq
-VERSION  := 1.5.0
+VERSION  := 1.6.0
 ARCH     := amd64
 AYUDANTE := /usr/libexec/cpu-freq/ayudante
 LOCALEDIR:= /usr/share/locale
@@ -24,7 +24,7 @@ GTK_LIBS := $(shell pkg-config --libs gtk+-3.0)
 XFCE     := $(shell pkg-config --exists libxfce4panel-2.0 && echo si)
 MOS      := $(foreach l,$(IDIOMAS),build/locale/$(l)/LC_MESSAGES/cpu-freq.mo)
 
-.PHONY: build deb clean prueba pot
+.PHONY: build deb clean test pot
 
 build: build/cpu-freq build/ayudante $(MOS) $(if $(XFCE),build/libcpu-freq-panel.so)
 ifneq ($(XFCE),si)
@@ -93,11 +93,14 @@ ifeq ($(XFCE),si)
 	dpkg-deb --root-owner-group -Zxz --build build/stage-xfce build/$(PKG)-xfce_$(VERSION)_$(ARCH).deb
 endif
 
-prueba:
+# Test build of the helper: no root check, every system path under build/prueba/raiz.
+# It is never packaged.
+build/prueba/ayudante: src/ayudante.c src/hw.h
 	@mkdir -p build/prueba
-	cp /etc/auto-cpufreq.conf build/prueba/
-	$(CC) $(CFLAGS) $(WARN) -DPRUEBA -DPRUEBA_DIR='"build/prueba"' src/ayudante.c -o build/prueba/ayudante
-	for p in 1700000 turbo auto; do build/prueba/ayudante $$p && echo "== $$p" && cat build/prueba/auto-cpufreq.conf; done
+	$(CC) $(CFLAGS) $(WARN) -DPRUEBA -DHW_RAIZ='"$(CURDIR)/build/prueba/raiz"' $< -o $@
+
+test: build/prueba/ayudante
+	bash tests/ayudante.sh build/prueba/ayudante $(CURDIR)/build/prueba/raiz
 
 clean:
 	rm -rf build

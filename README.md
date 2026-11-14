@@ -7,14 +7,21 @@ click, and **works with auto-cpufreq** instead of fighting it.
 | --- | --- | --- |
 | ![Light theme](docs/captura-claro.png) | ![Dark theme](docs/captura-oscuro.png) | ![AMOLED in French](docs/captura-amoled.png) |
 
+On short screens it switches to two columns:
+
+![Compact two-column layout](docs/captura-compacta.png)
+
 - Current frequency (average of all cores) and CPU governor.
-- A graph of the last 5 minutes of frequency and temperature.
+- A graph of the last 5 minutes of frequency and temperature, with the average frequency and
+  the average and peak temperature over that window.
 - Limit buttons built from your processor: **Auto**, its frequency levels and **Turbo**.
 - Temperature (max of CPU/GPU), battery, charger, free RAM and used swap.
 - A line under the buttons always shows the **real state** and warns you if the system is not
   keeping your choice.
 - **Settings**: theme (system, light, dark, AMOLED), language (English, Español, Português,
   Français, Deutsch) and bottom bar.
+- Fits small screens: below ~980 px of usable height (e.g. 1366×768) the window switches to two
+  columns, about 860×510.
 
 ## Bottom bar
 
@@ -25,7 +32,8 @@ click, and **works with auto-cpufreq** instead of fighting it.
 | **Panel plugin (XFCE)** | Mini speedometer and frequency inside the XFCE panel | ~30 kB inside the panel |
 
 Clicking the tray icon or the panel plugin opens the window; clicking again while it is in
-front hides it (tray) or closes it.
+front hides it (tray) or closes it. **Right-click** either one to pick Auto, a frequency level
+or Turbo without opening the window.
 
 ## Install
 
@@ -89,11 +97,17 @@ RAM_MINIMA=250
 sudo apt install build-essential pkg-config libgtk-3-dev libxfce4panel-2.0-dev librsvg2-bin gettext dpkg-dev
 make build     # app, helper, translations and panel plugin in build/
 make deb       # cpu-freq and cpu-freq-xfce packages in build/
-make prueba    # tests the helper without root on a copy of /etc/auto-cpufreq.conf
+make test      # 67 checks of the root helper, without root, against fake sysfs trees
 make clean
 ```
 
 Without `libxfce4panel-2.0-dev`, everything except the panel plugin is built.
+
+`make test` builds a test-only copy of the helper whose system paths point at
+`build/prueba/raiz`, then checks it against fake trees: the argument whitelist, charger and
+battery sections, restoring Auto, a desktop with no battery, no auto-cpufreq, auto-cpufreq
+without a config file, `intel_pstate` (continuous range, inverted `no_turbo`) and a machine
+without cpufreq. The GitHub Action runs it before building the packages.
 
 ## Translations
 
