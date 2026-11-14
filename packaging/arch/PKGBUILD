@@ -15,7 +15,7 @@ license=('MIT')
 makedepends=('gtk3' 'libx11' 'xfce4-panel' 'librsvg' 'gettext' 'pkgconf')
 checkdepends=('bash')
 source=("$pkgbase-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('SKIP')
+sha256sums=('d90c3a69189e239c23aaf4d62cf081a4272ec36c871fbb93d7c817fd641b56b4')
 
 _paths=(PREFIX=/usr LIBEXECDIR=/usr/lib PLUGDIR=/usr/lib/xfce4/panel/plugins
         LICENSEDIR=/usr/share/licenses/cpu-freq STRIP=)

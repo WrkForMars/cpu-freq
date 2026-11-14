@@ -86,7 +86,7 @@ See [CHANGELOG.md](CHANGELOG.md) for what changed in each version.
 | auto-cpufreq installed as a snap | Not tested |
 | Tray icon through StatusNotifierItem (needs `libayatana-appindicator3`) | Tested on XFCE's SNI host |
 | Tray icon on KDE Plasma and GNOME (AppIndicator extension) | Not tested |
-| Arch Linux PKGBUILD | Install paths tested; `makepkg` not tested |
+| Arch Linux PKGBUILD | Release tarball builds, tests and installs with Arch paths; `makepkg` itself not tested |
 | auto-cpufreq config in root's `~/.config` | Not supported: `/etc/auto-cpufreq.conf` is used |
 
 If you try it on other hardware, please open an issue with the result.
